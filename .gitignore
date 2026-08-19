@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+*.dmnd
+results/
+bioremediation_gene_miner_results/
+*.xlsx
+.DS_Store

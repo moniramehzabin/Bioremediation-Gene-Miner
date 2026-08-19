@@ -1,0 +1,43 @@
+family	major_category	evidence_class	default_confidence	regex	match_policy
+Azoreductase	Dyes	Direct	High	\bazoreductase\b|\bazoR\b	product_or_gene
+DyP-type peroxidase	Dyes	Direct	High	\bDyP[- ]type\b|\bdye[- ]decolorizing peroxidase\b	product_or_gene
+Laccase	Dyes	Candidate	Moderate	\blaccase\b	product_or_gene
+Flavin reductase	Dyes	Supporting	Moderate	\bflavin reductase\b|\bFMN reductase\b	product_or_gene
+Chromate transporter ChrA	Heavy metals	Direct	High	\bchrA\b|\bchromate transporter\b	product_or_gene
+Chromate reductase / ChrR-like	Heavy metals	Direct	High	\bchrR\b|\bchromate reductase\b	product_or_gene
+Arsenate reductase	Heavy metals	Direct	High	\barsC\b|\barsenate reductase\b	product_or_gene
+Arsenite resistance	Heavy metals	Direct	High	\barsA\b|\barsB\b|\barsenite.*(efflux|transport)	product_or_gene
+Mercuric reductase	Heavy metals	Direct	High	\bmerA\b|\bmercuric reductase\b	product_or_gene
+Organomercury lyase	Heavy metals	Direct	High	\bmerB\b|\borganomercur	product_or_gene
+Czc metal efflux	Heavy metals	Direct	High	\bczc[ADCB]?\b|metal cation efflux protein Czc	product_or_gene
+Copper-exporting ATPase	Heavy metals	Direct	High	\bcopA\b|\bcopB\b|copper[- ]exporting P[- ]type ATPase	product_required
+Lead resistance ATPase	Heavy metals	Direct	High	\bpbrA\b|lead[- ]exporting	product_or_gene
+Catechol 1,2-dioxygenase	Aromatic compounds	Direct	High	\bcatA\b|catechol 1,2[- ]dioxygenase	product_required
+Catechol 2,3-dioxygenase	Aromatic compounds	Direct	High	\bxylE\b|catechol 2,3[- ]dioxygenase|\bmetapyrocatechase\b	product_required
+HpaD-type dioxygenase	Aromatic compounds	Direct	High	\bhpaD\b|3,4[- ]dihydroxyphenylacetate 2,3[- ]dioxygenase	product_or_gene
+Protocatechuate dioxygenase	Aromatic compounds	Direct	High	\bpcaG\b|\bpcaH\b|protocatechuate 3,4[- ]dioxygenase	product_or_gene
+Benzoate dioxygenase	Aromatic compounds	Direct	High	\bbenA\b|benzoate 1,2[- ]dioxygenase	product_required
+Naphthalene dioxygenase	Hydrocarbons	Direct	High	\bnahA[cdCD]\b|naphthalene.*dioxygenase	product_or_gene
+Toluene dioxygenase	Hydrocarbons	Direct	High	\btodC1\b|toluene.*dioxygenase	product_or_gene
+Biphenyl dioxygenase	Hydrocarbons	Direct	High	\bbphA\b|biphenyl.*dioxygenase	product_or_gene
+Alkane monooxygenase	Hydrocarbons	Direct	High	\balkB\b|alkane 1[- ]monooxygenase	product_or_gene
+Long-chain alkane monooxygenase	Hydrocarbons	Direct	High	\bladA\b|long[- ]chain alkane.*monooxygenase	product_or_gene
+Haloalkane dehalogenase	Halogenated compounds	Direct	High	\bdhaA\b|haloalkane dehalogenase	product_or_gene
+LinA/LinB HCH degradation	Pesticides	Direct	High	\blinA\b|\blinB\b|HCH.*(dehydrochlorinase|dehalogenase)	product_or_gene
+Atrazine degradation	Pesticides	Direct	High	\batz[ABC]\b|atrazine chlorohydrolase|hydroxyatrazine	product_or_gene
+Organophosphate hydrolase	Pesticides	Direct	High	\bopd\b|organophosphorus hydrolase	product_or_gene
+Methyl parathion hydrolase	Pesticides	Direct	High	\bmpd\b|methyl parathion hydrolase	product_or_gene
+2,4-D dioxygenase	Pesticides	Direct	High	\btfdA\b|2,4[- ]dichlorophenoxyacetate.*dioxygenase	product_or_gene
+Nitronate monooxygenase	Nitro compounds	Candidate	Moderate	\bnitronate monooxygenase\b	product_or_gene
+Cytochrome P450	Xenobiotics	Candidate	Moderate	\bcytochrome P450\b|\bP450\b	product_required
+GcoA aromatic O-demethylase	Xenobiotics	Direct	High	\bgcoA\b|aromatic O[- ]demethylase.*P450	product_required
+PETase / PET hydrolase	Microplastics / polymers	Direct	High	\bPETase\b|poly\(ethylene terephthalate\) hydrolase|PET hydrolase	product_or_gene
+MHETase	Microplastics / polymers	Direct	High	\bMHETase\b|mono\(2[- ]hydroxyethyl\) terephthalate hydrolase	product_or_gene
+Cutinase-like polyester enzyme	Microplastics / polymers	Candidate	Moderate	\bcutinase\b|\bpolyester hydrolase\b	product_or_gene
+Polyurethane-associated enzyme	Microplastics / polymers	Candidate	Moderate	\bpolyurethanase\b|polyurethane esterase|polyurethane hydrolase	product_or_gene
+Superoxide dismutase	Stress support	Supporting	Moderate	\bsod[A-Z]?\b|superoxide dismutase	product_or_gene
+Catalase	Stress support	Supporting	Moderate	\bkat[A-Z]?\b|\bcatalase\b	product_or_gene
+Alkyl hydroperoxide reductase	Stress support	Supporting	Moderate	\bahp[CF]?\b|alkyl hydroperoxide reductase	product_or_gene
+Thioredoxin reductase	Stress support	Supporting	Moderate	\btrxB\b|thioredoxin reductase	product_or_gene
+UvrABC repair	Stress support	Supporting	Moderate	\buvr[ABC]\b|UvrABC	product_or_gene
+RecA/LexA DNA damage response	Stress support	Supporting	Moderate	\brecA\b|\blexA\b	product_or_gene

@@ -1,0 +1,68 @@
+family_or_target	major_category	pollutant_or_role	evidence_class	default_confidence	uniprot_query	interpretation_rule	specificity_class	headline_category_allowed
+azoR	Dyes	Azo dyes	Direct	High	gene_exact:azoR	Azoreductase family; azo-bond reduction.	direct_family	YES
+azoreductase	Dyes	Azo dyes	Direct	High	"protein_name:""azoreductase"""	Direct azo-bond reduction family.	direct_family	YES
+DyP-type peroxidase	Dyes	Azo / anthraquinone / aromatic dyes	Direct	High	"protein_name:""DyP-type peroxidase"""	Dye-decolorizing peroxidase family; substrate specificity varies.	direct_family	YES
+laccase	Dyes	Oxidative dye transformation	Candidate	Moderate	"protein_name:""laccase"""	Broad multicopper oxidase family; do not infer dye degradation from family membership alone.	candidate_family	YES
+flavin reductase	Dyes	Reductive dye transformation	Supporting	Moderate	"protein_name:""flavin reductase"""	Can supply reduced flavin to dye/xenobiotic redox reactions.	supporting_family	NO
+quinone reductase	Dyes	Redox transformation	Supporting	Moderate	"protein_name:""quinone reductase"""	Broad redox family; requires context.	supporting_family	NO
+chrA	Heavy metals	Chromate resistance	Direct	High	gene_exact:chrA	Chromate efflux/resistance.	direct_family	YES
+chrR	Heavy metals	Cr(VI) reduction	Direct	High	gene_exact:chrR	ChrR-like reductase family; sequence evidence still does not prove in vivo Cr(VI) reduction.	direct_family	YES
+chromate reductase	Heavy metals	Cr(VI) reduction	Direct	High	"protein_name:""chromate reductase"""	Chromate reduction candidate.	direct_family	YES
+arsC	Heavy metals	Arsenate detoxification	Direct	High	gene_exact:arsC	Arsenate reductase.	direct_family	YES
+arsB	Heavy metals	Arsenite resistance	Direct	High	gene_exact:arsB	Arsenite efflux.	direct_family	YES
+arsA	Heavy metals	Arsenite resistance	Direct	High	gene_exact:arsA	Arsenite transporter ATPase.	direct_family	YES
+merA	Heavy metals	Mercury detoxification	Direct	High	gene_exact:merA	Mercuric reductase.	direct_family	YES
+merB	Heavy metals	Organomercury detoxification	Direct	High	gene_exact:merB	Organomercury lyase.	direct_family	YES
+czcD	Heavy metals	Cd/Zn/Co resistance	Direct	High	gene_exact:czcD	Metal efflux.	direct_family	YES
+czcA	Heavy metals	Cd/Zn/Co resistance	Direct	High	gene_exact:czcA	RND-family heavy-metal efflux component.	direct_family	YES
+copA	Heavy metals	Copper resistance	Direct	High	gene_exact:copA	Copper-exporting P-type ATPase.	direct_family	YES
+copB	Heavy metals	Copper resistance	Direct	High	gene_exact:copB	Copper resistance/transport.	direct_family	YES
+pbrA	Heavy metals	Lead resistance	Direct	High	gene_exact:pbrA	Lead-exporting ATPase.	direct_family	YES
+nccA	Heavy metals	Ni/Co/Cd resistance	Direct	High	gene_exact:nccA	Heavy-metal efflux.	direct_family	YES
+catA	Aromatic compounds	Catechol ortho-cleavage	Direct	High	gene_exact:catA	Catechol 1,2-dioxygenase.	direct_family	YES
+xylE	Aromatic compounds	Catechol meta-cleavage	Direct	High	gene_exact:xylE	Catechol 2,3-dioxygenase / metapyrocatechase.	direct_family	YES
+hpaD	Aromatic compounds	Extradiol ring cleavage	Direct	High	gene_exact:hpaD	3,4-dihydroxyphenylacetate 2,3-dioxygenase family.	direct_family	YES
+pcaG	Aromatic compounds	Protocatechuate cleavage	Direct	High	gene_exact:pcaG	Protocatechuate 3,4-dioxygenase alpha subunit.	direct_family	YES
+pcaH	Aromatic compounds	Protocatechuate cleavage	Direct	High	gene_exact:pcaH	Protocatechuate 3,4-dioxygenase beta subunit.	direct_family	YES
+benA	Aromatic compounds	Benzoate oxidation	Direct	High	gene_exact:benA	Benzoate 1,2-dioxygenase component.	direct_family	YES
+nahAc	Hydrocarbons	PAH/naphthalene oxidation	Direct	High	gene_exact:nahAc	Naphthalene dioxygenase alpha subunit.	direct_family	YES
+nahAd	Hydrocarbons	PAH/naphthalene oxidation	Direct	High	gene_exact:nahAd	Naphthalene dioxygenase beta subunit.	direct_family	YES
+todC1	Hydrocarbons	Toluene oxidation	Direct	High	gene_exact:todC1	Toluene dioxygenase alpha subunit.	direct_family	YES
+bphA	Hydrocarbons	Biphenyl/PCB oxidation	Direct	High	gene_exact:bphA	Biphenyl dioxygenase alpha subunit.	direct_family	YES
+alkB	Hydrocarbons	Alkane oxidation	Direct	High	gene_exact:alkB	Alkane 1-monooxygenase.	direct_family	YES
+ladA	Hydrocarbons	Long-chain alkane oxidation	Direct	High	gene_exact:ladA	Long-chain alkane monooxygenase.	direct_family	YES
+dhaA	Halogenated compounds	Haloalkanes	Direct	High	gene_exact:dhaA	Haloalkane dehalogenase.	direct_family	YES
+linA	Pesticides	Lindane/HCH	Direct	High	gene_exact:linA	Gamma-HCH dehydrochlorinase.	direct_family	YES
+linB	Pesticides	Lindane/HCH	Direct	High	gene_exact:linB	Haloalkane dehalogenase in HCH degradation.	direct_family	YES
+atzA	Pesticides	Atrazine	Direct	High	gene_exact:atzA	Atrazine chlorohydrolase.	direct_family	YES
+atzB	Pesticides	Atrazine	Direct	High	gene_exact:atzB	Hydroxyatrazine ethylaminohydrolase.	direct_family	YES
+atzC	Pesticides	Atrazine	Direct	High	gene_exact:atzC	N-isopropylammelide isopropylaminohydrolase.	direct_family	YES
+opd	Pesticides	Organophosphates	Direct	High	gene_exact:opd	Organophosphorus hydrolase family.	direct_family	YES
+mpd	Pesticides	Methyl parathion	Direct	High	gene_exact:mpd	Methyl parathion hydrolase.	direct_family	YES
+tfdA	Pesticides	2,4-D	Direct	High	gene_exact:tfdA	2,4-dichlorophenoxyacetate dioxygenase.	direct_family	YES
+pnpA	Nitroaromatics	p-Nitrophenol	Direct	High	gene_exact:pnpA	p-Nitrophenol degradation pathway enzyme.	direct_family	YES
+nitronate monooxygenase	Nitro compounds	Nitroalkanes	Candidate	Moderate	"protein_name:""nitronate monooxygenase"""	Nitrocompound transformation.	candidate_family	YES
+PETase	Microplastics / polymers	PET	Direct	High	"protein_name:""poly(ethylene terephthalate) hydrolase"""	Direct PET depolymerization family; include experimentally supported PET hydrolases.	polymer_specific	YES
+IsPETase	Microplastics / polymers	PET	Direct	High	accession:A0A0K8P6T7	Reviewed PET hydrolase from I. sakaiensis/P. sakaiensis; seed reference.	polymer_specific	YES
+MHETase	Microplastics / polymers	PET intermediate MHET	Direct	High	"protein_name:""mono(2-hydroxyethyl) terephthalate hydrolase"""	Hydrolyzes MHET to terephthalate and ethylene glycol.	polymer_specific	YES
+IsMHETase	Microplastics / polymers	PET intermediate MHET	Direct	High	accession:A0A0K8P8E7	Reviewed MHETase seed reference.	polymer_specific	YES
+cutinase-like PET hydrolase	Microplastics / polymers	PET	Candidate	Moderate	"protein_name:""cutinase"""	Some cutinases depolymerize PET; cutinase family membership alone is insufficient.	polymer_candidate	YES
+polyester hydrolase	Microplastics / polymers	Polyesters	Candidate	Moderate	"protein_name:""polyester hydrolase"""	Potential polyester depolymerization; substrate/polymer must be verified.	polymer_candidate	YES
+polyurethane esterase	Microplastics / polymers	Polyurethane	Candidate	Moderate	"protein_name:""polyurethane esterase"""	Polyurethane-associated esterase family; direct activity must be verified.	polymer_candidate	YES
+polyurethanase	Microplastics / polymers	Polyurethane	Candidate	Moderate	"protein_name:""polyurethanase"""	Polyurethane degradation candidate.	polymer_candidate	YES
+lipase	Microplastics / polymers	Polyesters / PU support	Supporting	Low	"protein_name:""lipase"""	Very broad family; never report as plastic-degrading without stronger evidence.	broad_family	NO
+esterase	Microplastics / polymers	Polyesters / PU support	Supporting	Low	"protein_name:""esterase"""	Very broad family; use only with domain/context/reference support.	broad_family	NO
+laccase plastic-associated	Microplastics / polymers	Oxidative polymer weathering	Candidate	Low	"protein_name:""laccase"""	Oxidative enzyme sometimes associated with polymer modification; not direct proof of plastic degradation.	broad_family	NO
+peroxidase plastic-associated	Microplastics / polymers	Oxidative polymer weathering	Candidate	Low	"protein_name:""peroxidase"""	Broad oxidative family; requires polymer-specific evidence.	broad_family	NO
+cytochrome P450	Xenobiotics	Oxidative transformation	Candidate	Moderate	"protein_name:""cytochrome P450"""	Broad superfamily; P450 membership alone does not prove bioremediation.	candidate_family	YES
+gcoA	Xenobiotics	Guaiacol/aromatic O-demethylation	Direct	High	gene_exact:gcoA	P450 component of aromatic O-demethylase system.	direct_family	YES
+sodA	Stress support	Oxidative stress	Supporting	Moderate	gene_exact:sodA	ROS defense; supports survival in contaminated environments.	supporting_family	NO
+katA	Stress support	Oxidative stress	Supporting	Moderate	gene_exact:katA	Catalase; ROS defense.	supporting_family	NO
+katE	Stress support	Oxidative stress	Supporting	Moderate	gene_exact:katE	Catalase HPII; ROS defense.	supporting_family	NO
+ahpC	Stress support	Oxidative stress	Supporting	Moderate	gene_exact:ahpC	Peroxide detoxification.	supporting_family	NO
+trxB	Stress support	Redox homeostasis	Supporting	Moderate	gene_exact:trxB	Thioredoxin reductase.	supporting_family	NO
+uvrA	Stress support	UV/DNA repair	Supporting	Moderate	gene_exact:uvrA	Nucleotide excision repair.	supporting_family	NO
+uvrB	Stress support	UV/DNA repair	Supporting	Moderate	gene_exact:uvrB	Nucleotide excision repair.	supporting_family	NO
+uvrC	Stress support	UV/DNA repair	Supporting	Moderate	gene_exact:uvrC	Nucleotide excision repair.	supporting_family	NO
+recA	Stress support	DNA damage response	Supporting	Moderate	gene_exact:recA	SOS/DNA repair.	supporting_family	NO
+lexA	Stress support	DNA damage response	Supporting	Moderate	gene_exact:lexA	SOS regulator.	supporting_family	NO
