@@ -500,7 +500,7 @@ def main():
     export_interpro_candidates(cds, hyp_best, interpro_faa)
 
     report = outdir/"Bioremediation_Gene_Miner_Report.xlsx"
-   final = make_report(report, annotated, hyp_best, hyp_meta, diamond_all, ip, len(cds))
+    final = make_report(report, annotated, hyp_best, hyp_meta, diamond_all, ip, len(cds))
 
     print("\nDONE")
     print("Report:", report.resolve())
