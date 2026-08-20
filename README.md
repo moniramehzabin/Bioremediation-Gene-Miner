@@ -1,6 +1,6 @@
 # Bioremediation Gene Miner
 
-**Version 0.3.2 — research prototype**
+Version 0.3.3 — research prototype
 
 A Python/DIAMOND workflow for mining bacterial whole-genome annotations for
 **annotated and previously hypothetical proteins** potentially associated with:
@@ -153,3 +153,11 @@ domain integration and formal validation are ongoing.
 - Ambiguous gene symbols no longer override an explicit contradictory product annotation.
 - Example fixed during testing: `xylE` annotated as `D-xylose-proton symporter` is no longer misclassified as catechol 2,3-dioxygenase.
 - Selected ambiguous families now require supporting product text rather than gene-symbol-only matches.
+
+
+## v0.3.3
+
+- Fixed the report Summary so `Total CDS` now represents the complete number of CDS features parsed from the GenBank input.
+- Verified the corrected CDS totals on two WGS annotations: 2,892 CDS and 2,213 CDS.
+- Revised InterPro integration so detected InterPro signatures are retained as supporting evidence without automatically upgrading Moderate DIAMOND predictions to High confidence.
+- InterPro-supported predictions remain candidates requiring functional interpretation and, where appropriate, experimental validation.
