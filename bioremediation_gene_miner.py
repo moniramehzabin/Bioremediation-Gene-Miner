@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Bioremediation Gene Miner v0.3.2
+Bioremediation Gene Miner v0.3.3
 
 Unified bacterial WGS screening prototype:
 1) screens already-annotated CDSs
@@ -31,7 +31,7 @@ try:
 except Exception:
     SeqIO = None
 
-VERSION = "0.3.2"
+VERSION = "0.3.3"
 
 # ----------------------------
 # GenBank parsing
