@@ -246,11 +246,30 @@ def classify_hypothetical_hits(df, meta):
         (merged["query_len"] < 0.5 * merged["subject_len"])
     )
 
-    # Keep best hit per query by bitscore, then e-value.
+    # Keep the best hit per query AND biological reference family.
+# This prevents a valid ChrR/AzoR/ChrA-family hit from being hidden
+# by a slightly stronger hit to another reference family.
+_family_cols = [c for c in ["All_family_targets", "Gene", "gene", "Headline_category", "Category"] if c in merged.columns]
+
+if _family_cols:
+    _family_col = _family_cols[0]
     best = (
-        merged.sort_values(["query","bitscore","evalue"], ascending=[True,False,True])
-              .groupby("query", as_index=False)
-              .first()
+        merged.sort_values(
+            ["query", "bitscore", "evalue"],
+            ascending=[True, False, True]
+        )
+        .groupby(["query", _family_col], as_index=False)
+        .first()
+    )
+else:
+    # Fallback for metadata lacking a family/category column.
+    best = (
+        merged.sort_values(
+            ["query", "bitscore", "evalue"],
+            ascending=[True, False, True]
+        )
+        .groupby("query", as_index=False)
+        .first()
     )
 
     # Category safeguards from v0.2.1 metadata.
