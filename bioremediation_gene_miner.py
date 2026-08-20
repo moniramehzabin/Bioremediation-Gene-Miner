@@ -317,11 +317,8 @@ def add_interpro_support(best, ip):
                 seen.add(x); out.append(x)
         return "; ".join(out)
     best["interpro_support"] = best["query"].map(lambda q: uniq_join(support.get(str(q), [])))
-    best["domain_validated"] = best["interpro_support"].astype(str).str.len() > 0
-    # Upgrade only non-weak candidates; domain evidence is supportive, not magical.
-    mask = best["domain_validated"] & (best["confidence"] == "Moderate")
-    best.loc[mask, "confidence"] = "High"
-    best.loc[best["domain_validated"], "evidence_source"] = "DIAMOND + InterPro"
+    best["interpro_detected"] = best["interpro_support"].astype(str).str.len() > 0
+    best.loc[best["interpro_detected"], "evidence_source"] = "DIAMOND + InterPro support"
     return best
 
 # ----------------------------
