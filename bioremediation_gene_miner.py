@@ -329,7 +329,8 @@ def add_interpro_support(best, ip):
 # ----------------------------
 CONF_ORDER = {"High":0, "Moderate":1, "Weak":2}
 
-def make_report(out_xlsx, annotated, hyp_best, hyp_meta, diamond_all, interpro):
+def make_report(out_xlsx, annotated, hyp_best, hyp_meta, diamond_all, interpro, total_cds):
+
     final_rows = []
 
     if not annotated.empty:
@@ -386,7 +387,7 @@ def make_report(out_xlsx, annotated, hyp_best, hyp_meta, diamond_all, interpro):
     review = final[final["Decision"].isin(["Review","Reject"])] if not final.empty else final
 
     summary = pd.DataFrame([
-        ["Total CDS", len(hyp_meta) + (0 if annotated.empty else annotated["locus_tag"].nunique())],
+        ["Total CDS", total_cds],
         ["Annotated candidate rows", len(annotated)],
         ["Hypothetical proteins screened", len(hyp_meta)],
         ["Hypothetical queries with DIAMOND hits", 0 if hyp_best is None or hyp_best.empty else hyp_best["query"].nunique()],
@@ -499,7 +500,7 @@ def main():
     export_interpro_candidates(cds, hyp_best, interpro_faa)
 
     report = outdir/"Bioremediation_Gene_Miner_Report.xlsx"
-    final = make_report(report, annotated, hyp_best, hyp_meta, diamond_all, ip)
+   final = make_report(report, annotated, hyp_best, hyp_meta, diamond_all, ip, len(cds))
 
     print("\nDONE")
     print("Report:", report.resolve())
