@@ -298,7 +298,7 @@ else:
         ),
         axis=1
     )
-    return best
+        return best
 
 # ----------------------------
 # InterPro optional integration
