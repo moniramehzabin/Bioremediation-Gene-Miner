@@ -1,0 +1,27 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using the metadata below."
+
+title: "Bioremediation Gene Miner"
+
+type: software
+
+authors:
+  - family-names: "Mehzabin"
+    given-names: "Monira"
+  - family-names: "Rezwan"
+    given-names: "Khandoker Md"
+
+version: "0.3.5"
+
+date-released: "2026-08-20"
+
+url: "https://github.com/moniramehzabin/Bioremediation-Gene-Miner"
+
+repository-code: "https://github.com/moniramehzabin/Bioremediation-Gene-Miner"
+
+license: "MIT"
+
+abstract: >-
+  Bioremediation Gene Miner is a research-oriented bioinformatics tool for
+  screening bacterial whole-genome sequencing data for annotated and
+  hypothetical genes potentially associated with bioremediation functions.
