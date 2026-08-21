@@ -1,6 +1,6 @@
 # Bioremediation Gene Miner
-
-**Version 0.3.5 — Research Prototype**
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22046925.svg)](https://doi.org/10.5281/zenodo.22046925)
+**Version 0.3.6 — Research Prototype**
 
 Bioremediation Gene Miner is a Python/DIAMOND workflow for mining bacterial whole-genome annotations for **annotated and previously hypothetical proteins** potentially associated with environmental bioremediation.
 
