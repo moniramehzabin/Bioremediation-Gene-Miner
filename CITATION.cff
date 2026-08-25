@@ -11,9 +11,8 @@ authors:
   - family-names: "Rezwan"
     given-names: "Khandoker Md"
 
-version: "0.3.6"
-
-date-released: "2026-08-21"
+version: "0.3.7"
+date-released: "2026-08-25"
 
 url: "https://github.com/moniramehzabin/Bioremediation-Gene-Miner"
 
