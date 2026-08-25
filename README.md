@@ -1,402 +1,440 @@
+
 # Bioremediation Gene Miner
+
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22046925.svg)](https://doi.org/10.5281/zenodo.22046925)
-**Version 0.3.6 — Research Prototype**
 
-Bioremediation Gene Miner is a Python/DIAMOND workflow for mining bacterial whole-genome annotations for **annotated and previously hypothetical proteins** potentially associated with environmental bioremediation.
+**Version 0.3.7 — Research Prototype**
 
-The workflow screens genes related to:
+Bioremediation Gene Miner is a Python/DIAMOND workflow for mining bacterial whole-genome annotations for **annotated and hypothetical proteins** potentially associated with environmental bioremediation.
 
-- azo-dye degradation and oxidative dye transformation
-- Cr(VI) reduction/resistance and other heavy metals
+The workflow combines existing genome annotation, curated protein-reference similarity searches, evidence-aware candidate classification, and optional InterPro-based domain/family evidence.
+
+> **Important:** Bioremediation Gene Miner identifies computational candidates. A predicted gene or protein should not be interpreted as experimental confirmation of a bioremediation phenotype or biochemical activity.
+
+---
+
+## What the tool screens
+
+The reference library and annotation rules cover bioremediation-associated functions including:
+
 - aromatic compound degradation
-- pesticides and dehalogenation
-- nitro compounds
-- xenobiotic oxidation and cytochrome P450 systems
-- microplastic/polymer biodegradation candidates
-- oxidative-stress responses
-- UV and DNA-repair systems
+- azo-dye degradation and oxidative dye transformation
+- Cr(VI) reduction/resistance and other heavy-metal-associated functions
+- pesticide/xenobiotic transformation
+- dehalogenation
+- nitro-compound transformation
+- oxidative enzymes
+- hydrocarbon-associated functions
+- polymer/microplastic-associated candidate functions
+
+The library can be expanded as additional experimentally supported reference proteins and bioremediation families are curated.
 
 ---
 
-## Why this tool exists
-
-Bacterial genomes may contain thousands of coding sequences (CDSs). Some potentially important bioremediation genes are already functionally annotated, whereas others remain labelled as `hypothetical protein`.
-
-Bioremediation Gene Miner combines:
+## Core workflow
 
 ```text
-Existing annotations
-        ↓
-Curated annotation rules
+Bacterial GenBank genome
+        |
+        +--> Annotated CDS screening
+        |       |
+        |       +--> annotation_rules.tsv
+        |
+        +--> Hypothetical/uncharacterized proteins
+                |
+                +--> DIAMOND search
+                        |
+                        +--> curated bioremediation reference database
+                        |
+                        +--> family-level candidate resolution
+                        |
+                        +--> evidence/confidence classification
+                        |
+                        +--> selected Weak + Review candidates
+                                |
+                                +--> InterProScan
+                                        |
+                                        +--> PANTHER
+                                        +--> Pfam
+                                        +--> CDD
+                                        +--> NCBIfam
+                                        +--> other InterPro member databases
+                                        |
+                                        +--> evidence resolver
 ```
 
-with:
-
-```text
-Hypothetical proteins
-        ↓
-DIAMOND sequence homology
-        ↓
-Query + biological-family retention
-        ↓
-Identity and coverage assessment
-        ↓
-Optional InterPro domain evidence
-        ↓
-Evidence-ranked candidate report
-```
-
-The workflow is intended for **candidate discovery and prioritization**, not automatic experimental functional assignment.
+The workflow intentionally separates **annotation-derived evidence**, **sequence-homology evidence**, and **protein-family/domain evidence** rather than treating all predictions as equivalent.
 
 ---
 
-## Important scientific limitation
+## Evidence classes
 
-A sequence or domain match is **not experimental proof** that a protein performs a particular pollutant-degradation reaction.
+Candidates are evaluated using multiple evidence sources.
 
-The workflow therefore separates several concepts in the report, including:
+### Existing annotation
 
-- evidence class
-- confidence
-- match strength
-- decision
-- evidence source
+Already annotated CDS features are screened using product-aware rules from `annotation_rules.tsv`.
+
+### DIAMOND homology
+
+Hypothetical or uncharacterized proteins are compared with the curated reference protein database.
+
+The output retains useful alignment information including:
+
 - sequence identity
 - query coverage
 - reference coverage
-- InterPro domain evidence
+- E-value
+- bit score
+- best reference
 
-Predicted proteins should be interpreted as **candidates requiring further validation**.
+Candidate assignment is performed at the curated biological-family level rather than treating every individual reference alignment as an independent biological prediction.
 
-Broad protein families such as cytochrome P450s, esterases, lipases, laccases, peroxidases and oxidoreductases must not automatically be interpreted as evidence of a particular pollutant-degradation phenotype.
+### InterPro evidence
 
----
+Selected hypothetical candidates requiring additional evaluation can be submitted to EMBL-EBI InterProScan.
 
-# Evidence preservation in v0.3.5
+Version 0.3.7 can retain compact evidence from:
 
-A central feature of v0.3.5 is preservation of potentially informative sequence signals.
+- PANTHER
+- Pfam
+- CDD
+- NCBIfam
+- integrated InterPro entries
+- GO terms
+- additional InterPro member databases
 
-### Weak matches are retained
-
-Weak DIAMOND signals are **not silently discarded**.
-
-They are explicitly reported as:
-
-```text
-Weak match
-```
-
-where appropriate.
-
-A Weak match may therefore remain available for later domain analysis, genomic-context analysis, literature comparison or experimental validation.
-
-### Match strength and biological decision are separate
-
-For example:
-
-```text
-Confidence: Weak
-Match strength: Weak match
-Decision: Review
-```
-
-does not mean that the sequence similarity is absent.
-
-It means that the available sequence evidence is insufficient for a strong specific functional assignment and should be reviewed.
+Verbose InterPro output is preserved separately so that the main candidate report remains interpretable.
 
 ---
 
-# Family-level DIAMOND retention
+## InterPro resolver
 
-Earlier approaches that retained only the single best DIAMOND hit for each hypothetical protein could hide biologically interesting alternative family signals.
+InterPro evidence is compared with the DIAMOND-derived family hypothesis.
 
-v0.3.5 instead retains the best supported reference at the:
+The resolver can classify evaluated candidates as:
 
-```text
-query protein + curated biological family
-```
+- **SUPPORTING** — independent domain/family evidence is consistent with the DIAMOND candidate
+- **BROAD/RELATED** — InterPro supports a broader or related protein family but does not specifically establish the proposed function
+- **CONFLICTING** — InterPro evidence favors an alternative interpretation
+- **NO_HITS** — the submitted protein produced no usable InterPro evidence
 
-level.
+Proteins that were not selected for InterPro evaluation remain explicitly identifiable as **NOT_SUBMITTED** through `InterPro_status`.
 
-Therefore, when one hypothetical protein shows similarity to more than one curated functional family, relevant family-level evidence can remain visible rather than being eliminated solely because another reference produced a better global score.
-
-This is particularly useful when screening multifunctional or evolutionarily related oxidoreductase families.
-
----
-
-# Independent InterPro evidence
-
-InterProScan results can optionally be integrated into the report.
-
-Importantly:
-
-**InterPro evidence does not overwrite the original DIAMOND classification.**
-
-For example, a protein may have:
-
-```text
-DIAMOND:
-Weak match / Review
-
-InterPro:
-Strong conserved-domain evidence for a broader protein architecture
-```
-
-Both observations are retained.
-
-The workflow does **not** automatically convert the Weak DIAMOND assignment to High confidence.
-
-This distinction helps separate:
-
-1. evidence for a **specific curated reference-family assignment**, and
-2. evidence for the **broader domain architecture of the protein**.
-
-For multidomain proteins, InterPro may identify combinations such as:
-
-- cytochrome P450 domains
-- FAD/NAD(P)-binding domains
-- pyridine nucleotide-disulfide oxidoreductase-related domains
-- flavodoxin/flavoprotein domains
-- other conserved catalytic or structural domains
-
-Such domain evidence can substantially improve biological interpretation while still preserving uncertainty about the exact substrate-specific function.
+The resolver is an evidence-integration layer, not experimental validation.
 
 ---
 
-# Requirements
+## Confidence and review logic
 
-- Python 3.10+
+The program distinguishes stronger candidates from uncertain or conflicting predictions.
+
+Output categories include:
+
+- high-confidence candidates
+- annotated candidates
+- predicted hypothetical candidates
+- family-level candidates
+- InterPro-supported candidates
+- supporting functions
+- candidates requiring review
+- polymer/microplastic-associated candidates
+
+Weak or conflicting evidence is retained for inspection rather than silently converted into a positive functional assignment.
+
+---
+
+## Input
+
+Primary input:
+
+```text
+annotated bacterial genome in GenBank format (.gbk/.gbff)
+```
+
+The genome should contain CDS features and translated protein sequences.
+
+Additional resources used by the workflow include:
+
+```text
+annotation_rules.tsv
+bioremediation_reference_v0.2.1.dmnd
+bioremediation_reference_v0.2.1_metadata.tsv
+```
+
+The repository also contains the corresponding curated reference FASTA and database-building resources.
+
+---
+
+## Requirements
+
+- Python 3
 - DIAMOND
-- Windows, Linux or macOS
-- Python packages listed in `requirements.txt`
+- pandas
+- Biopython
+- openpyxl
+- requests
 
-Install the Python dependencies:
+Install Python dependencies with:
 
 ```bash
-py -m pip install -r requirements.txt
+pip install -r requirements.txt
 ```
 
-On Linux/macOS, use `python3` instead of `py` where appropriate.
+DIAMOND must be installed separately and available either through the system PATH or supplied using the command-line option.
 
 ---
 
-# Building the reference database
-
-First build the curated reference FASTA:
-
-```bash
-py build_reference_db_v0.2.1.py
-```
-
-Then build the DIAMOND database:
-
-```bash
-diamond makedb --in bioremediation_reference_v0.2.1.faa --db bioremediation_reference_v0.2.1
-```
-
----
-
-# Running Bioremediation Gene Miner
+## Basic usage
 
 Example:
 
 ```bash
-py bioremediation_gene_miner.py genome.gbk ^
-  --reference-db bioremediation_reference_v0.2.1 ^
-  --reference-metadata bioremediation_reference_v0.2.1_metadata.tsv ^
-  --annotation-rules annotation_rules.tsv ^
+python bioremediation_gene_miner.py genome.gbk \
+  --reference-db bioremediation_reference_v0.2.1 \
+  --reference-metadata bioremediation_reference_v0.2.1_metadata.tsv \
+  --annotation-rules annotation_rules.tsv \
   --outdir results
 ```
 
-The program:
+On Windows, an explicit DIAMOND executable can be supplied:
 
-1. parses CDS features from the GenBank annotation
-2. screens existing gene/product annotations
-3. extracts hypothetical proteins
-4. performs DIAMOND similarity searches
-5. calculates sequence identity
-6. calculates query coverage
-7. calculates reference coverage
-8. retains relevant query + family-level evidence
-9. classifies sequence evidence
-10. preserves Weak signals for review
-11. produces Excel and TSV reports
-12. generates `interpro_candidates.faa` for optional domain analysis
+```cmd
+py bioremediation_gene_miner.py genome.gbk --reference-db bioremediation_reference_v0.2.1 --reference-metadata bioremediation_reference_v0.2.1_metadata.tsv --annotation-rules annotation_rules.tsv --diamond "C:\path\to\diamond.exe" --outdir results
+```
 
 ---
 
-# Optional InterProScan integration
+## Automated InterProScan
 
-After the first run, upload:
+Version 0.3.7 supports automated submission of selected candidates to the EMBL-EBI InterProScan web service.
 
-```text
-results/interpro_candidates.faa
+Example:
+
+```cmd
+py bioremediation_gene_miner.py genome.gbk --reference-db bioremediation_reference_v0.2.1 --reference-metadata bioremediation_reference_v0.2.1_metadata.tsv --annotation-rules annotation_rules.tsv --diamond "C:\path\to\diamond.exe" --interpro-auto --interpro-email your_email@example.com --outdir results
 ```
 
-to InterProScan.
+With automated InterPro enabled, the workflow:
 
-Download the InterPro TSV result and rerun the miner:
+1. identifies candidates selected for additional domain/family evaluation;
+2. creates the InterPro candidate FASTA;
+3. submits the sequences to EMBL-EBI InterProScan;
+4. monitors job status;
+5. retrieves the InterPro TSV result;
+6. extracts compact family/domain evidence;
+7. applies the InterPro resolver;
+8. writes both compact and full InterPro reports.
 
-```bash
-py bioremediation_gene_miner.py genome.gbk ^
-  --reference-db bioremediation_reference_v0.2.1 ^
-  --reference-metadata bioremediation_reference_v0.2.1_metadata.tsv ^
-  --annotation-rules annotation_rules.tsv ^
-  --interpro interpro_results.tsv ^
-  --outdir results_with_interpro
-```
-
-InterPro evidence is added as an **independent evidence layer**.
-
-The underlying DIAMOND identity, coverage, confidence, match strength and decision remain visible.
+Availability of automated InterPro analysis depends on the external EMBL-EBI service.
 
 ---
 
-# Main report
+## Main output report
 
-The principal output is:
+The primary workbook is:
 
 ```text
 Bioremediation_Gene_Miner_Report.xlsx
 ```
 
-The workbook can include sheets such as:
-
-- `Summary`
-- `All_candidates`
-- `High_confidence`
-- `Annotated_candidates`
-- `Predicted_hypothetical`
-- `Family_level_candidates`
-- `InterPro_supported`
-- `Microplastic_candidates`
-- `Supporting_functions`
-- `Review_required`
-- `All_DIAMOND_hits`
-- `InterPro_evidence`
-
-Companion TSV files are also generated for convenient downstream analysis.
-
----
-
-# Important report fields
-
-Depending on the evidence source, candidate tables may contain:
+It contains:
 
 ```text
-Locus_tag
-Family_target
-Gene
-Product_or_prediction
-Origin
-Category
-Evidence_class
-Confidence
-Match_strength
-Decision
-Evidence_source
-Identity_pct
-Query_coverage_pct
-Reference_coverage_pct
-Evalue
-Bitscore
-Best_reference
-InterPro_detected
-InterPro_analyses
-InterPro_accessions
-InterPro_domain_support
-Interpretation
+Bioremediation_Gene_Miner_Report.xlsx
+│
+├── Summary
+├── All_candidates
+├── High_confidence
+├── Annotated_candidates
+├── Predicted_hypothetical
+├── Family_level_candidates
+├── InterPro_supported
+├── Supporting_functions
+├── Review_required
+├── Microplastic_candidates
+└── All_DIAMOND_hits
 ```
 
-These fields are intentionally kept separate so that strong domain evidence does not conceal weak sequence-level evidence, and vice versa.
+### `Summary`
+
+Provides a compact overview of the genome-screening run.
+
+### `All_candidates`
+
+Main candidate table combining annotation-derived and hypothetical-protein candidates.
+
+### `High_confidence`
+
+Candidates meeting the tool's high-confidence criteria.
+
+### `Annotated_candidates`
+
+Candidates recovered directly from existing genome annotation.
+
+### `Predicted_hypothetical`
+
+Hypothetical/uncharacterized proteins recovered through the sequence-evidence workflow.
+
+### `Family_level_candidates`
+
+Family-resolved hypothetical candidate assignments.
+
+### `InterPro_supported`
+
+Candidates for which InterPro evidence provides supporting or otherwise informative family/domain evidence according to the resolver logic.
+
+### `Supporting_functions`
+
+Additional functions relevant to interpretation of the bioremediation potential.
+
+### `Review_required`
+
+Weak, broad, conflicting, or otherwise uncertain candidates retained for manual evaluation.
+
+### `Microplastic_candidates`
+
+Dedicated output for polymer/microplastic-associated candidate functions. An empty sheet means that no qualifying candidates were detected in that genome; it does not disable this screening category.
+
+### `All_DIAMOND_hits`
+
+Underlying DIAMOND alignment evidence retained for transparency and manual inspection.
 
 ---
 
-# Development validation
+## InterPro full report
 
-The workflow has been technically tested using two bacterial whole-genome annotations.
+When InterPro results are available, the workflow also produces:
 
-During development, regression testing was used to confirm that evidence-integration changes did not unexpectedly alter previously recovered candidate sets.
+```text
+InterPro_Full_Report.xlsx
+│
+├── All_InterPro_hits
+├── Pathway_metadata
+└── Protein_hit_summary
+```
 
-Testing demonstrated that:
+This workbook preserves verbose InterPro-derived information separately from the main candidate report.
 
-- family-level DIAMOND signals could be retained
-- Weak signals remained visible
-- optional InterPro evidence could be added without removing underlying DIAMOND rows
-- candidate counts remained stable during the final evidence-integration tests
+The design keeps the primary workbook compact while retaining the detailed evidence needed for auditing or deeper interpretation.
 
-These development tests demonstrate **technical workflow consistency only**.
+Additional files can include:
 
-They do **not** establish biological sensitivity, specificity or experimental confirmation of predicted functions.
+```text
+interpro_web.tsv
+interpro_candidates.faa
+```
 
 ---
 
-# Interpretation of predictions
+## Interpreting InterPro fields
 
-Recommended terminology includes:
+The main candidate-facing tables retain compact fields such as:
 
-> sequence-supported candidate
+```text
+InterPro_status
+PANTHER_hits
+Pfam_hits
+CDD_hits
+NCBIfam_hits
+Integrated_InterPro_entries
+InterPro_GO_terms
+Resolver_status
+Resolver_note
+```
 
-> family-level candidate
+Large or highly verbose InterPro fields are kept in `InterPro_Full_Report.xlsx` rather than duplicated throughout the main report.
 
-> Weak sequence match requiring review
+---
 
-> InterPro-supported domain architecture
+## Biological interpretation
 
-Avoid describing a predicted gene as experimentally confirmed solely on the basis of DIAMOND or InterPro evidence.
+The program is designed for **candidate discovery and prioritization**.
 
-Where biologically important, candidates should be validated using approaches such as:
+A result such as a DIAMOND family match, Pfam domain, PANTHER family, CDD hit, NCBIfam assignment, or integrated InterPro entry provides computational evidence. It does not by itself demonstrate that the organism performs the predicted environmental transformation.
 
-- conserved-domain analysis
+Recommended downstream validation may include:
+
+- manual sequence/domain inspection
+- comparison with characterized homologues
 - genomic-context analysis
-- phylogenetic analysis
-- structural prediction
+- pathway-level assessment
 - expression analysis
-- enzyme assays
-- gene knockout/complementation
-- pollutant-transformation experiments
+- biochemical assays
+- phenotype-based bioremediation experiments
 
 ---
 
-# Version 0.3.5
+## Reference library
 
-Major changes include:
+The bundled reference library is curated specifically around bioremediation-associated biological functions.
 
-- preservation of Weak DIAMOND signals
-- explicit `Weak match` reporting
-- separation of confidence, match strength and decision
-- retention of the best reference per query + curated biological family
-- improved recovery of alternative family-level evidence
-- increased DIAMOND target retention for family-level screening
-- independent InterPro evidence integration
-- preservation of original DIAMOND classification after InterPro integration
-- reporting of InterPro analyses, accessions and domain descriptions
-- dedicated `InterPro_supported` output
-- continued coverage safeguards against misleading partial matches
+Reference metadata can include information such as:
 
----
+- accession
+- protein/enzyme name
+- organism
+- biological family
+- bioremediation category
+- pathway/function
+- evidence level
+- curation information
 
-# Previous updates
-
-## v0.3.3
-
-- corrected total CDS reporting
-- retained InterPro signatures as supporting evidence without automatic confidence upgrading
-- verified CDS totals during WGS testing
-
-## v0.3.2
-
-- corrected high-confidence CLI reporting
-- added product-aware annotation matching
-- reduced false assignments caused by ambiguous gene symbols
-- improved handling of conflicting gene/product annotations
+The reference library should be treated as a versioned scientific resource and expanded conservatively using traceable evidence.
 
 ---
 
-# Repository status
+## Reproducibility
 
-Bioremediation Gene Miner is currently a **research prototype**.
+For reproducible analyses, record:
 
-Reference-database curation, benchmarking and formal biological validation are ongoing.
+- Bioremediation Gene Miner version
+- reference database version
+- reference metadata version
+- annotation-rules version
+- DIAMOND version
+- whether automated InterPro analysis was enabled
+- date of analysis
 
-Predictions produced by this software should be interpreted as **computational candidates rather than experimental confirmation**.
+Predictions can change when the reference library, annotation rules, external databases, or evidence thresholds change.
+
+---
+
+## Version 0.3.7
+
+Major changes in v0.3.7 include:
+
+- automated EMBL-EBI InterProScan submission for selected Weak/Review candidates
+- structured `InterPro_status`
+- InterPro evidence resolver
+- explicit `SUPPORTING`, `BROAD/RELATED`, `CONFLICTING`, and `NO_HITS` interpretations
+- compact PANTHER, Pfam, CDD, and NCBIfam evidence in the main report
+- integrated InterPro entries and GO evidence
+- separate `InterPro_Full_Report.xlsx` for verbose InterPro results
+- revised candidate-facing workbook organization
+- dedicated `Microplastic_candidates` output retained for polymer-associated screening
+- improved separation of computational evidence from biological interpretation
+
+---
+
+## Citation
+
+If you use Bioremediation Gene Miner, please cite the software using the repository `CITATION.cff` metadata.
+
+DOI:
+
+**10.5281/zenodo.22046925**
+
+---
+
+## License
+
+This project is distributed under the MIT License. See `LICENSE` for details.
+
+---
+
+## Development status
+
+Bioremediation Gene Miner v0.3.7 is a **research prototype**.
+
+The software is intended to support exploratory bacterial WGS analysis, candidate prioritization, and hypothesis generation. Results should be independently reviewed and experimentally validated before biological conclusions are made.

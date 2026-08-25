@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Bioremediation Gene Miner v0.3.4
+Bioremediation Gene Miner v0.3.7-release-candidate-frozen
 
 Evidence-ranked bacterial WGS screening:
 1) screens already-annotated CDSs using annotation_rules.tsv
@@ -22,6 +22,10 @@ from copy import copy
 import csv
 import re
 import subprocess
+import time
+import urllib.parse
+import urllib.request
+import xml.etree.ElementTree as ET
 from collections import defaultdict
 from pathlib import Path
 
@@ -32,7 +36,7 @@ try:
 except Exception:
     SeqIO = None
 
-VERSION = "0.3.5-test"
+VERSION = "0.3.7-release-candidate"
 
 
 # ============================================================
@@ -549,24 +553,39 @@ def load_interpro(path):
 
 def add_interpro_support(best, ip):
     """
-    Add InterPro evidence WITHOUT changing, filtering, hiding, or upgrading
-    the original DIAMOND confidence/decision.
+    Attach InterPro evidence without changing Gene Miner's original
+    candidate, confidence, or decision logic.
 
-    A Weak DIAMOND match remains Weak/Review even when InterPro supplies
-    strong domain-level support. InterPro is reported as an independent,
-    additive evidence layer.
+    Raw one-row-per-hit evidence is retained separately. Common member
+    databases are also summarized into dedicated columns.
     """
     if best is None or best.empty:
         return best
 
     best = best.copy()
-
-    # Always create the columns so report structure is stable even when no
-    # InterPro file was supplied.
-    best["interpro_support"] = ""
-    best["interpro_accessions"] = ""
-    best["interpro_analyses"] = ""
-    best["interpro_detected"] = False
+    defaults = {
+        "interpro_support": "",
+        "interpro_accessions": "",
+        "interpro_analyses": "",
+        "interpro_detected": False,
+        "interpro_status": "NOT_SUBMITTED",
+        "panther_hits": "",
+        "pfam_hits": "",
+        "cdd_hits": "",
+        "ncbifam_hits": "",
+        "prints_hits": "",
+        "gene3d_hits": "",
+        "superfamily_hits": "",
+        "smart_hits": "",
+        "prosite_hits": "",
+        "other_interpro_member_hits": "",
+        "integrated_interpro_entries": "",
+        "interpro_go_terms": "",
+        "interpro_pathways": "",
+        "interpro_coordinates": "",
+    }
+    for col, default in defaults.items():
+        best[col] = default
 
     if ip is None or ip.empty:
         return best
@@ -574,22 +593,76 @@ def add_interpro_support(best, ip):
     descriptions = defaultdict(list)
     accessions = defaultdict(list)
     analyses = defaultdict(list)
+    db_hits = defaultdict(lambda: defaultdict(list))
+    integrated = defaultdict(list)
+    go_terms = defaultdict(list)
+    pathways = defaultdict(list)
+    coordinates = defaultdict(list)
 
-    def add_unique(mapping, protein, value):
-        value = str(value).strip()
-        if value and value != "-" and value not in mapping[protein]:
-            mapping[protein].append(value)
+    def add_unique(d, key, value):
+        value = str(value or "").strip()
+        if value and value != "-" and value not in d[key]:
+            d[key].append(value)
+
+    def norm_db(value):
+        return re.sub(r"[^a-z0-9]+", "", str(value or "").lower())
+
+    db_map = {
+        "panther": "panther_hits",
+        "pfam": "pfam_hits",
+        "cdd": "cdd_hits",
+        "ncbifam": "ncbifam_hits",
+        "prints": "prints_hits",
+        "gene3d": "gene3d_hits",
+        "cathgene3d": "gene3d_hits",
+        "superfamily": "superfamily_hits",
+        "smart": "smart_hits",
+        "prosite": "prosite_hits",
+        "prositepatterns": "prosite_hits",
+        "prositeprofiles": "prosite_hits",
+    }
 
     for _, r in ip.iterrows():
-        protein = str(r["protein"]).strip()
+        protein = str(r.get("protein", "") or "").strip()
         if not protein:
             continue
 
-        add_unique(descriptions, protein, r.get("signature_description", ""))
-        add_unique(descriptions, protein, r.get("interpro_description", ""))
-        add_unique(accessions, protein, r.get("signature_accession", ""))
-        add_unique(accessions, protein, r.get("interpro_accession", ""))
-        add_unique(analyses, protein, r.get("analysis", ""))
+        analysis = str(r.get("analysis", "") or "").strip()
+        sig_acc = str(r.get("signature_accession", "") or "").strip()
+        sig_desc = str(r.get("signature_description", "") or "").strip()
+        ipr_acc = str(r.get("interpro_accession", "") or "").strip()
+        ipr_desc = str(r.get("interpro_description", "") or "").strip()
+        hit_start = str(r.get("start", "") or "").strip()
+        hit_stop = str(r.get("stop", "") or "").strip()
+        go = str(r.get("go_terms", "") or "").strip()
+        pathway = str(r.get("pathways", "") or "").strip()
+
+        add_unique(descriptions, protein, sig_desc)
+        add_unique(descriptions, protein, ipr_desc)
+        add_unique(accessions, protein, sig_acc)
+        add_unique(accessions, protein, ipr_acc)
+        add_unique(analyses, protein, analysis)
+
+        target = db_map.get(norm_db(analysis), "other_interpro_member_hits")
+        member_hit = " | ".join(
+            x for x in (sig_acc, sig_desc, ipr_acc, ipr_desc)
+            if x and x != "-"
+        )
+        if member_hit and member_hit not in db_hits[protein][target]:
+            db_hits[protein][target].append(member_hit)
+
+        if ipr_acc and ipr_acc != "-":
+            add_unique(
+                integrated, protein,
+                " | ".join(x for x in (ipr_acc, ipr_desc) if x and x != "-")
+            )
+        add_unique(go_terms, protein, go)
+        add_unique(pathways, protein, pathway)
+        if hit_start and hit_stop:
+            add_unique(
+                coordinates, protein,
+                f"{analysis}:{sig_acc or 'NA'}:{hit_start}-{hit_stop}"
+            )
 
     best["interpro_support"] = best["query"].map(
         lambda q: "; ".join(descriptions.get(str(q), []))
@@ -600,18 +673,258 @@ def add_interpro_support(best, ip):
     best["interpro_analyses"] = best["query"].map(
         lambda q: "; ".join(analyses.get(str(q), []))
     )
-    best["interpro_detected"] = (
-        best["interpro_support"].astype(str).str.len() > 0
+    best["interpro_detected"] = best["query"].map(
+        lambda q: bool(
+            descriptions.get(str(q)) or accessions.get(str(q)) or analyses.get(str(q))
+        )
+    )
+    best.loc[
+        best["interpro_detected"], "interpro_status"
+    ] = "HITS_FOUND"
+
+    for col in [
+        "panther_hits", "pfam_hits", "cdd_hits", "ncbifam_hits",
+        "prints_hits", "gene3d_hits", "superfamily_hits", "smart_hits",
+        "prosite_hits", "other_interpro_member_hits",
+    ]:
+        best[col] = best["query"].map(
+            lambda q, c=col: "; ".join(db_hits.get(str(q), {}).get(c, []))
+        )
+
+    best["integrated_interpro_entries"] = best["query"].map(
+        lambda q: "; ".join(integrated.get(str(q), []))
+    )
+    best["interpro_go_terms"] = best["query"].map(
+        lambda q: "; ".join(go_terms.get(str(q), []))
+    )
+    best["interpro_pathways"] = best["query"].map(
+        lambda q: "; ".join(pathways.get(str(q), []))
+    )
+    best["interpro_coordinates"] = best["query"].map(
+        lambda q: "; ".join(coordinates.get(str(q), []))
     )
 
-    # Evidence source is additive only. DO NOT alter confidence or decision.
     best.loc[
-        best["interpro_detected"],
-        "evidence_source",
-    ] = "DIAMOND + InterPro (independent domain evidence)"
+        best["interpro_detected"], "evidence_source"
+    ] = "DIAMOND + InterPro (independent evidence)"
+    return best
+
+
+# ============================================================
+# InterPro evidence relationship resolver
+# ============================================================
+# This resolver ONLY summarizes how independent InterPro evidence relates
+# to the DIAMOND candidate. It does not assign pathways, reactions, or a
+# forced final protein function.
+RESOLVER_GROUPS = {
+    "p450": ["cytochrome p450", "cyt_p450", "pf00067", "ipr001128", "ipr002397"],
+    "intradiol_dioxygenase": ["intradiol", "ring-cleavage dioxygenase", "pf00775", "ipr000627", "ipr015889"],
+    "multicopper": ["multi-copper", "multicopper", "laccase", "pf02578", "ipr038371", "ipr011324"],
+    "sdr": ["short-chain dehydrogenase", "short chain dehydrogenase", "sdr family", "rossmann", "pf00106", "ipr002347", "ipr036291"],
+    "p_loop_atpase": ["p-loop", "partitioning atpase", "parab", "aaa domain", "soj", "ipr027417", "ipr025669"],
+    "fmn_reductase": ["fmn reductase", "flavin reductase", "flavoprotein-like", "pf03358", "ipr005025", "ipr029039", "pf01613", "ipr002563"],
+}
+FAMILY_EXPECTATIONS = {
+    "cytochrome p450": {"p450"}, "gcoa": {"p450"},
+    "cata": {"intradiol_dioxygenase"},
+    "laccase": {"multicopper"}, "laccase plastic-associated": {"multicopper"},
+    "linb": {"sdr"}, "lina": {"sdr"},
+    "chrr": {"fmn_reductase"}, "chromate reductase": {"fmn_reductase"},
+    "flavin reductase": {"fmn_reductase"},
+    "azoreductase": {"fmn_reductase"},
+    "arsa": {"p_loop_atpase"},
+}
+BROAD_RELATED = {"linb", "lina"}
+
+def _resolver_norm(x):
+    return re.sub(r"[^a-z0-9]+", " ", str(x or "").lower()).strip()
+
+def _resolver_groups(row):
+    blob = "; ".join([
+        str(row.get("interpro_support", "")),
+        str(row.get("interpro_accessions", "")),
+        str(row.get("panther_hits", "")),
+        str(row.get("pfam_hits", "")),
+        str(row.get("cdd_hits", "")),
+        str(row.get("ncbifam_hits", "")),
+        str(row.get("prints_hits", "")),
+        str(row.get("gene3d_hits", "")),
+        str(row.get("superfamily_hits", "")),
+        str(row.get("smart_hits", "")),
+        str(row.get("prosite_hits", "")),
+    ]).lower()
+    return {g for g, terms in RESOLVER_GROUPS.items() if any(t in blob for t in terms)}
+
+def resolve_interpro_evidence(best):
+    """Evidence-relationship summary only; never changes DIAMOND confidence/decision."""
+    if best is None or best.empty:
+        return best
+
+    best = best.copy()
+    best["resolver_status"] = "UNINFORMATIVE"
+    best["resolver_note"] = ""
+
+    for i, r in best.iterrows():
+        if not bool(r.get("interpro_detected", False)):
+            best.at[i, "resolver_note"] = "No InterPro evidence was returned for this candidate."
+            continue
+
+        fam = _resolver_norm(r.get("family_target", ""))
+        groups = _resolver_groups(r)
+        expected = set()
+        for key, vals in FAMILY_EXPECTATIONS.items():
+            if fam == key or fam.startswith(key + " "):
+                expected |= vals
+
+        matched = expected & groups
+        support = str(r.get("interpro_support", "")).lower()
+
+        # Known strong alternative for ArsA-like weak DIAMOND hits.
+        if fam == "arsa" and "p_loop_atpase" in groups and any(
+            x in support for x in ["partitioning atpase", "parab", "sporulation initiation inhibitor soj"]
+        ):
+            best.at[i, "resolver_status"] = "CONFLICTING"
+            best.at[i, "resolver_note"] = (
+                "InterPro returns a ParAB/Soj-like P-loop ATPase interpretation rather "
+                "than evidence specifically consistent with the DIAMOND candidate."
+            )
+
+        # Compatible but only broad architecture.
+        elif matched and fam in BROAD_RELATED:
+            best.at[i, "resolver_status"] = "BROAD/RELATED"
+            best.at[i, "resolver_note"] = (
+                "InterPro supports a broader protein-family/domain architecture related "
+                "to the DIAMOND candidate."
+            )
+
+        # Mixed laccase/multicopper plus YfiH/CNF1-like evidence.
+        elif matched and fam.startswith("laccase") and any(
+            x in support for x in ["yfih", "cnf1", "cysteine hydrolase", "peptidoglycan editing"]
+        ):
+            best.at[i, "resolver_status"] = "BROAD/RELATED"
+            best.at[i, "resolver_note"] = (
+                "InterPro contains multicopper/laccase-related evidence together with "
+                "alternative YfiH/CNF1-like annotations."
+            )
+
+        elif matched:
+            best.at[i, "resolver_status"] = "SUPPORTING"
+            best.at[i, "resolver_note"] = (
+                "Independent InterPro family/domain evidence is consistent with the "
+                "DIAMOND candidate."
+            )
+
+        elif expected and groups:
+            best.at[i, "resolver_status"] = "CONFLICTING"
+            best.at[i, "resolver_note"] = (
+                "InterPro returns recognizable family/domain evidence that is not "
+                "consistent with the expected architecture of the DIAMOND candidate."
+            )
+
+        elif groups:
+            best.at[i, "resolver_status"] = "BROAD/RELATED"
+            best.at[i, "resolver_note"] = (
+                "InterPro provides related or broader family/domain information but "
+                "does not directly support the DIAMOND candidate."
+            )
+
+        else:
+            best.at[i, "resolver_note"] = (
+                "InterPro evidence was returned, but it is not informative enough for "
+                "a simple relationship summary."
+            )
 
     return best
 
+# ============================================================
+# Automated InterProScan via EMBL-EBI Job Dispatcher
+# ============================================================
+INTERPRO_REST_BASE = "https://www.ebi.ac.uk/Tools/services/rest/iprscan5"
+
+def _http_text(url, data=None, timeout=60):
+    req = urllib.request.Request(url, data=data, headers={
+        "User-Agent": "Bioremediation-Gene-Miner/0.3.7-release-candidate"
+    })
+    with urllib.request.urlopen(req, timeout=timeout) as response:
+        return response.read().decode("utf-8", errors="replace")
+
+def _interpro_result_types(job_id):
+    root = ET.fromstring(_http_text(
+        f"{INTERPRO_REST_BASE}/resulttypes/{job_id}"
+    ))
+    found = []
+    for elem in root.iter():
+        if elem.tag.split("}")[-1] == "type":
+            item = {c.tag.split("}")[-1]: (c.text or "").strip() for c in elem}
+            if item.get("identifier"):
+                found.append(item)
+    return found
+
+def run_interpro_web(fasta_path, email, outdir, poll_seconds=5, timeout_minutes=45):
+    fasta_path, outdir = Path(fasta_path), Path(outdir)
+    status_file = outdir / "interpro_web_status.txt"
+    tsv_path = outdir / "interpro_web.tsv"
+
+    if not fasta_path.exists() or fasta_path.stat().st_size == 0:
+        status_file.write_text("NOT_RUN\tNo Weak+Review candidates.\n", encoding="utf-8")
+        print("[info] InterPro web: no candidates; skipped.")
+        return None
+    if not email:
+        status_file.write_text("NOT_RUN\t--interpro-email missing.\n", encoding="utf-8")
+        print("[warn] --interpro-auto requested but --interpro-email is missing.")
+        return None
+
+    payload = urllib.parse.urlencode({
+        "email": email,
+        "title": "Bioremediation Gene Miner weak-review candidates",
+        "stype": "p",
+        "sequence": fasta_path.read_text(encoding="utf-8"),
+        "goterms": "true",
+        "pathways": "true",
+    }).encode("utf-8")
+
+    try:
+        print("[run] submitting Weak+Review candidates to EMBL-EBI InterProScan...")
+        job_id = _http_text(f"{INTERPRO_REST_BASE}/run/", data=payload, timeout=120).strip()
+        if not job_id:
+            raise RuntimeError("Empty InterProScan job ID.")
+        (outdir / "interpro_job_id.txt").write_text(job_id + "\n", encoding="utf-8")
+        print("[info] InterPro job:", job_id)
+
+        deadline = time.time() + timeout_minutes * 60
+        last = None
+        while time.time() < deadline:
+            status = _http_text(f"{INTERPRO_REST_BASE}/status/{job_id}").strip()
+            if status != last:
+                print("[info] InterPro status:", status)
+                last = status
+            if status == "FINISHED":
+                break
+            if status not in {"QUEUED", "RUNNING", "PENDING"}:
+                raise RuntimeError(f"InterProScan ended with status: {status}")
+            time.sleep(max(3, int(poll_seconds)))
+        else:
+            raise TimeoutError(f"InterProScan exceeded {timeout_minutes} minute timeout.")
+
+        ids = {x.get("identifier", "") for x in _interpro_result_types(job_id)}
+        if "tsv" not in ids:
+            raise RuntimeError("TSV unavailable; result types: " + ", ".join(sorted(ids)))
+
+        req = urllib.request.Request(
+            f"{INTERPRO_REST_BASE}/result/{job_id}/tsv",
+            headers={"User-Agent": "Bioremediation-Gene-Miner/0.3.7-release-candidate"},
+        )
+        with urllib.request.urlopen(req, timeout=120) as response:
+            tsv_path.write_bytes(response.read())
+
+        status_file.write_text(f"FINISHED\t{job_id}\t{tsv_path.name}\n", encoding="utf-8")
+        print("[info] InterPro TSV:", tsv_path.resolve())
+        return str(tsv_path)
+    except Exception as exc:
+        status_file.write_text(f"FAILED\t{type(exc).__name__}: {exc}\n", encoding="utf-8")
+        print(f"[warn] InterPro web failed: {exc}")
+        print("[warn] continuing without InterPro evidence; FASTA preserved.")
+        return None
 
 # ============================================================
 # Report creation
@@ -655,10 +968,27 @@ def make_report(
                 "Evalue": "",
                 "Bitscore": "",
                 "Best_reference": "",
-                "InterPro_detected": "",
+                "InterPro_status": "NOT_SUBMITTED",
                 "InterPro_analyses": "",
                 "InterPro_accessions": "",
                 "InterPro_domain_support": "",
+                "PANTHER_hits": "",
+                "Pfam_hits": "",
+                "CDD_hits": "",
+                "NCBIfam_hits": "",
+                "PRINTS_hits": "",
+                "Gene3D_hits": "",
+                "SUPERFAMILY_hits": "",
+                "SMART_hits": "",
+                "PROSITE_hits": "",
+                "Other_InterPro_member_hits": "",
+                "Integrated_InterPro_entries": "",
+                "InterPro_GO_terms": "",
+                "InterPro_pathway_records": 0,
+                "InterPro_pathway_evidence": "",
+                "InterPro_coordinates": "",
+                "Resolver_status": "",
+                "Resolver_note": "",
                 "Interpretation": r["interpretation"],
             })
 
@@ -692,16 +1022,38 @@ def make_report(
                 "Evalue": r["evalue"],
                 "Bitscore": round(float(r["bitscore"]), 1),
                 "Best_reference": r["subject"],
-                "InterPro_detected": bool(r.get("interpro_detected", False)),
+                "InterPro_status": r.get("interpro_status", "NOT_SUBMITTED"),
                 "InterPro_analyses": r.get("interpro_analyses", ""),
                 "InterPro_accessions": r.get("interpro_accessions", ""),
                 "InterPro_domain_support": r.get("interpro_support", ""),
+                "PANTHER_hits": r.get("panther_hits", ""),
+                "Pfam_hits": r.get("pfam_hits", ""),
+                "CDD_hits": r.get("cdd_hits", ""),
+                "NCBIfam_hits": r.get("ncbifam_hits", ""),
+                "PRINTS_hits": r.get("prints_hits", ""),
+                "Gene3D_hits": r.get("gene3d_hits", ""),
+                "SUPERFAMILY_hits": r.get("superfamily_hits", ""),
+                "SMART_hits": r.get("smart_hits", ""),
+                "PROSITE_hits": r.get("prosite_hits", ""),
+                "Other_InterPro_member_hits": r.get("other_interpro_member_hits", ""),
+                "Integrated_InterPro_entries": r.get("integrated_interpro_entries", ""),
+                "InterPro_GO_terms": r.get("interpro_go_terms", ""),
+                "InterPro_pathway_records": (
+                    0 if not str(r.get("interpro_pathways", "") or "").strip()
+                    else len([x for x in str(r.get("interpro_pathways", "")).split("; ") if x.strip()])
+                ),
+                "InterPro_pathway_evidence": (
+                    "See InterPro_Full_Report.xlsx and interpro_web.tsv"
+                    if str(r.get("interpro_pathways", "") or "").strip() else ""
+                ),
+                "InterPro_coordinates": r.get("interpro_coordinates", ""),
+                "Resolver_status": r.get("resolver_status", "UNINFORMATIVE"),
+                "Resolver_note": r.get("resolver_note", ""),
                 "Interpretation": (
                     r["interpretation"]
                     + (
-                        " Independent InterPro domain evidence is present; "
-                        "the DIAMOND confidence and decision above are intentionally "
-                        "preserved and must be interpreted separately."
+                        " Independent InterPro evidence is present; the original DIAMOND "
+                        "confidence and decision are preserved unchanged."
                         if bool(r.get("interpro_detected", False))
                         else ""
                     )
@@ -759,7 +1111,7 @@ def make_report(
         ].copy()
 
         interpro_supported = final[
-            final["InterPro_detected"].eq(True)
+            final["InterPro_status"].eq("HITS_FOUND")
         ].copy()
     else:
         high = final.copy()
@@ -788,14 +1140,34 @@ def make_report(
             ["Hypothetical proteins screened", len(hyp_meta)],
             ["Hypothetical queries with DIAMOND hits", hyp_queries],
             ["Family-level hypothetical hit rows", family_hits],
-            ["InterPro-supported final rows", len(interpro_supported)],
+            ["InterPro rows with hits", len(interpro_supported)],
             ["High-confidence final candidates", len(high)],
-            ["Microplastic/polymer candidates", len(micro)],
             ["Review/rejected final rows", len(review)],
         ],
         columns=["Metric", "Value"],
     )
 
+    # Main workbook: concise InterPro evidence only.
+    # Full evidence remains in InterPro_Full_Report.xlsx + interpro_web.tsv.
+    verbose_main_columns = [
+        "InterPro_analyses", "InterPro_accessions", "InterPro_domain_support",
+        "PRINTS_hits", "Gene3D_hits", "SUPERFAMILY_hits", "SMART_hits",
+        "PROSITE_hits", "Other_InterPro_member_hits",
+        "InterPro_pathway_records", "InterPro_pathway_evidence",
+        "InterPro_coordinates",
+    ]
+
+    def _compact_main(df):
+        if df is None:
+            return df
+        return df.drop(columns=verbose_main_columns, errors="ignore")
+
+    final_main = _compact_main(final)
+    high_main = _compact_main(high)
+    family_candidates_main = _compact_main(family_candidates)
+    interpro_supported_main = _compact_main(interpro_supported)
+    supporting_main = _compact_main(supporting)
+    review_main = _compact_main(review)
     with pd.ExcelWriter(out_xlsx, engine="openpyxl") as writer:
         summary.to_excel(
             writer,
@@ -803,13 +1175,13 @@ def make_report(
             index=False,
         )
 
-        final.to_excel(
+        final_main.to_excel(
             writer,
             sheet_name="All_candidates",
             index=False,
         )
 
-        high.to_excel(
+        high_main.to_excel(
             writer,
             sheet_name="High_confidence",
             index=False,
@@ -822,37 +1194,50 @@ def make_report(
         )
 
         if hyp_best is not None:
-            hyp_best.to_excel(
+            hyp_best_excel = hyp_best.drop(
+                columns=[
+                    "interpro_detected",
+                    "interpro_pathways", "interpro_analyses",
+                    "interpro_accessions", "interpro_support",
+                    "prints_hits", "gene3d_hits", "superfamily_hits",
+                    "smart_hits", "prosite_hits",
+                    "other_interpro_member_hits", "interpro_coordinates",
+                ],
+                errors="ignore",
+            )
+            hyp_best_excel.to_excel(
                 writer,
                 sheet_name="Predicted_hypothetical",
                 index=False,
             )
 
-        family_candidates.to_excel(
+        family_candidates_main.to_excel(
             writer,
             sheet_name="Family_level_candidates",
             index=False,
         )
 
-        interpro_supported.to_excel(
+        interpro_supported_main.to_excel(
             writer,
             sheet_name="InterPro_supported",
             index=False,
         )
 
-        micro.to_excel(
+
+        micro_main = _compact_main(micro)
+        micro_main.to_excel(
             writer,
             sheet_name="Microplastic_candidates",
             index=False,
         )
 
-        supporting.to_excel(
+        supporting_main.to_excel(
             writer,
             sheet_name="Supporting_functions",
             index=False,
         )
 
-        review.to_excel(
+        review_main.to_excel(
             writer,
             sheet_name="Review_required",
             index=False,
@@ -864,12 +1249,9 @@ def make_report(
             index=False,
         )
 
-        if interpro is not None and not interpro.empty:
-            interpro.to_excel(
-                writer,
-                sheet_name="InterPro_evidence",
-                index=False,
-            )
+        # Full raw/detailed InterPro evidence is written separately to
+        # InterPro_Full_Report.xlsx and preserved in interpro_web.tsv.
+        # Keeping it out of the main workbook prevents Excel cell overflow.
 
         # Basic formatting only; no biological information is altered here.
         for ws in writer.book.worksheets:
@@ -927,8 +1309,8 @@ def export_interpro_candidates(cds, hyp_best, out_faa):
 
     wanted = set(
         hyp_best.loc[
-            hyp_best["decision"].isin(["Candidate", "Review"])
-            & hyp_best["confidence"].isin(["High", "Moderate"]),
+            (hyp_best["decision"] == "Review")
+            & (hyp_best["confidence"] == "Weak"),
             "query",
         ].astype(str)
     )
@@ -995,6 +1377,14 @@ def main():
         "--interpro",
         help="Optional InterProScan TSV for selected hypothetical candidates",
     )
+    ap.add_argument(
+        "--interpro-auto",
+        action="store_true",
+        help="Automatically submit Weak+Review candidates to EMBL-EBI InterProScan REST.",
+    )
+    ap.add_argument("--interpro-email", help="Email required by EMBL-EBI Job Dispatcher.")
+    ap.add_argument("--interpro-poll-seconds", type=int, default=5)
+    ap.add_argument("--interpro-timeout-minutes", type=int, default=45)
 
     ap.add_argument(
         "--outdir",
@@ -1073,16 +1463,54 @@ def main():
             hyp_best["family_target"].nunique(),
         )
 
-    ip = load_interpro(args.interpro)
+    interpro_faa = outdir / "interpro_candidates.faa"
+    export_interpro_candidates(cds, hyp_best, interpro_faa)
+
+    interpro_input = args.interpro
+    if args.interpro_auto and args.interpro:
+        print("[warn] --interpro supplied; skipping automatic web submission.")
+    elif args.interpro_auto:
+        interpro_input = run_interpro_web(
+            interpro_faa, args.interpro_email, outdir,
+            args.interpro_poll_seconds, args.interpro_timeout_minutes,
+        )
+
+    ip = load_interpro(interpro_input)
     hyp_best = add_interpro_support(hyp_best, ip)
 
-    interpro_faa = outdir / "interpro_candidates.faa"
+    # Distinguish proteins not submitted to InterPro from submitted proteins
+    # that returned no usable hits. This avoids misleading FALSE values.
+    submitted_interpro = set()
+    if interpro_faa.exists() and interpro_faa.stat().st_size > 0:
+        with open(interpro_faa, encoding="utf-8") as _f:
+            for _line in _f:
+                if _line.startswith(">"):
+                    submitted_interpro.add(_line[1:].strip().split()[0])
 
-    export_interpro_candidates(
-        cds,
-        hyp_best,
-        interpro_faa,
-    )
+    if hyp_best is not None and not hyp_best.empty:
+        hyp_best.loc[
+            hyp_best["query"].astype(str).isin(submitted_interpro),
+            "interpro_status",
+        ] = "NO_HITS"
+        hyp_best.loc[
+            hyp_best["interpro_detected"].eq(True),
+            "interpro_status",
+        ] = "HITS_FOUND"
+
+    hyp_best = resolve_interpro_evidence(hyp_best)
+
+    # Resolver has exactly four categories only for submitted/evaluated proteins.
+    # Non-submitted candidates keep resolver fields blank.
+    if hyp_best is not None and not hyp_best.empty:
+        not_submitted = hyp_best["interpro_status"].eq("NOT_SUBMITTED")
+        hyp_best.loc[not_submitted, "resolver_status"] = ""
+        hyp_best.loc[not_submitted, "resolver_note"] = ""
+
+        no_hits = hyp_best["interpro_status"].eq("NO_HITS")
+        hyp_best.loc[no_hits, "resolver_status"] = "UNINFORMATIVE"
+        hyp_best.loc[no_hits, "resolver_note"] = (
+            "Protein was submitted to InterPro, but no usable InterPro evidence was returned."
+        )
 
     report = outdir / "Bioremediation_Gene_Miner_Report.xlsx"
 
@@ -1095,6 +1523,76 @@ def main():
         ip,
         len(cds),
     )
+
+    # Separate complete InterPro workbook.
+    # The raw interpro_web.tsv remains the lossless source file.
+    # Excel has a 32,767-character hard limit per cell, so any exceptionally
+    # long field is split into numbered continuation rows without truncation.
+    interpro_full_xlsx = outdir / "InterPro_Full_Report.xlsx"
+
+    def _excel_chunk_table(df, max_chars=30000):
+        if df is None or df.empty:
+            return pd.DataFrame()
+        rows = []
+        for _, src_row in df.iterrows():
+            base = src_row.to_dict()
+            long_cols = {
+                c: str(v)
+                for c, v in base.items()
+                if pd.notna(v) and len(str(v)) > max_chars
+            }
+            if not long_cols:
+                row = dict(base)
+                row["_continuation_index"] = 1
+                row["_continuation_total"] = 1
+                rows.append(row)
+                continue
+
+            total = max(
+                (len(v) + max_chars - 1) // max_chars
+                for v in long_cols.values()
+            )
+            for idx in range(total):
+                row = dict(base)
+                for c, value in long_cols.items():
+                    a = idx * max_chars
+                    b = (idx + 1) * max_chars
+                    row[c] = value[a:b]
+                row["_continuation_index"] = idx + 1
+                row["_continuation_total"] = total
+                rows.append(row)
+        return pd.DataFrame(rows)
+
+    if ip is not None and not ip.empty:
+        ip_excel = _excel_chunk_table(ip)
+        with pd.ExcelWriter(interpro_full_xlsx, engine="openpyxl") as ip_writer:
+            ip_excel.to_excel(
+                ip_writer, sheet_name="All_InterPro_hits", index=False
+            )
+
+            if "pathways" in ip.columns:
+                _p = ip["pathways"].fillna("").astype(str).str.strip()
+                ip_path = ip[(_p != "") & (_p != "-")].copy()
+                if not ip_path.empty:
+                    _excel_chunk_table(ip_path).to_excel(
+                        ip_writer, sheet_name="Pathway_metadata", index=False
+                    )
+
+            summary_cols = [
+                "query", "panther_hits", "pfam_hits", "cdd_hits", "ncbifam_hits",
+                "prints_hits", "gene3d_hits", "superfamily_hits", "smart_hits",
+                "prosite_hits", "integrated_interpro_entries", "interpro_go_terms",
+                "interpro_coordinates", "resolver_status", "resolver_note",
+            ]
+            available = [c for c in summary_cols if c in hyp_best.columns]
+            if available:
+                _excel_chunk_table(
+                    hyp_best[available].drop_duplicates()
+                ).to_excel(
+                    ip_writer, sheet_name="Protein_hit_summary", index=False
+                )
+
+        print(f"[info] Full InterPro report: {interpro_full_xlsx}")
 
     print("\nDONE")
     print("Report:", report.resolve())
