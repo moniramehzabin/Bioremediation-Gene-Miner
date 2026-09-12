@@ -165,7 +165,32 @@ def screen_annotated(cds, rules):
         ):
             continue
 
-        gene_text = " | ".join([r["locus_tag"], r["gene"]])
+        # Build several matching variants of the annotated gene name.
+        # This makes Prokka-style copy/version suffixes transparent to the
+        # rule engine without altering the original gene name in the report.
+        #
+        # Examples:
+        #   azoR2_1 -> azoR2_1, azoR2, azoR
+        #   catA_2  -> catA_2, catA
+        #   copA1   -> copA1, copA
+        gene_original = str(r["gene"] or "").strip()
+        gene_variants = []
+
+        if gene_original:
+            gene_variants.append(gene_original)
+
+            # Remove Prokka copy-number suffix: _1, _2, _3, ...
+            gene_no_copy = re.sub(r"_\d+$", "", gene_original)
+            if gene_no_copy and gene_no_copy not in gene_variants:
+                gene_variants.append(gene_no_copy)
+
+            # Also expose the family root when a terminal number is attached
+            # directly to the gene name, e.g. azoR2 -> azoR, copA1 -> copA.
+            gene_family_root = re.sub(r"\d+$", "", gene_no_copy)
+            if gene_family_root and gene_family_root not in gene_variants:
+                gene_variants.append(gene_family_root)
+
+        gene_text = " | ".join([r["locus_tag"]] + gene_variants)
         product_text = " | ".join(
             [product, r["EC_number"], r["db_xref"]]
         )
