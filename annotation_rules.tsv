@@ -1,5 +1,5 @@
 family	major_category	evidence_class	default_confidence	regex	match_policy
-Azoreductase	Dyes	Direct	High	\bazoreductase\b|\bazoR\b	product_or_gene
+Azoreductase	Dyes	Direct	High	\bazoreductase\b|\bazoR(?:\d+)?(?:_\d+)?\b	product_or_gene
 DyP-type peroxidase	Dyes	Direct	High	\bDyP[- ]type\b|\bdye[- ]decolorizing peroxidase\b	product_or_gene
 Laccase	Dyes	Candidate	Moderate	\blaccase\b	product_or_gene
 Flavin reductase	Dyes	Supporting	Moderate	\bflavin reductase\b|\bFMN reductase\b	product_or_gene
