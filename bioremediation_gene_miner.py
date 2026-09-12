@@ -191,8 +191,29 @@ def screen_annotated(cds, rules):
                 gene_variants.append(gene_family_root)
 
         gene_text = " | ".join([r["locus_tag"]] + gene_variants)
+
+        # Preserve the original product annotation, but also create a
+        # punctuation-normalized variant for matching. This allows equivalent
+        # forms such as "catechol-2,3-dioxygenase",
+        # "catechol_2,3_dioxygenase", and "catechol 2,3 dioxygenase"
+        # to be recognized without changing the annotation shown in reports.
+        product_variants = [product]
+        product_normalized = re.sub(
+            r"[-_\u2010\u2011\u2012\u2013\u2014]+",
+            " ",
+            product,
+        )
+        product_normalized = re.sub(
+            r"\s+",
+            " ",
+            product_normalized,
+        ).strip()
+
+        if product_normalized and product_normalized != product:
+            product_variants.append(product_normalized)
+
         product_text = " | ".join(
-            [product, r["EC_number"], r["db_xref"]]
+            product_variants + [r["EC_number"], r["db_xref"]]
         )
 
         for rule, rx, policy in rules:

@@ -13,7 +13,7 @@ Czc metal efflux	Heavy metals	Direct	High	\bczc[ADCB]?\b|metal cation efflux pro
 Copper-exporting ATPase	Heavy metals	Direct	High	\bcopA\b|\bcopB\b|copper[- ]exporting P[- ]type ATPase	product_required
 Lead resistance ATPase	Heavy metals	Direct	High	\bpbrA\b|lead[- ]exporting	product_or_gene
 Catechol 1,2-dioxygenase	Aromatic compounds	Direct	High	\bcatA\b|catechol 1,2[- ]dioxygenase	product_required
-Catechol 2,3-dioxygenase	Aromatic compounds	Direct	High	\bxylE\b|catechol 2,3[- ]dioxygenase|\bmetapyrocatechase\b	product_required
+Catechol 2,3-dioxygenase	Aromatic compounds	Direct	High	\bcatE\b|\bxylE\b|catechol[- ]2,3[- ]dioxygenase|\bmetapyrocatechase\b	product_required
 HpaD-type dioxygenase	Aromatic compounds	Direct	High	\bhpaD\b|3,4[- ]dihydroxyphenylacetate 2,3[- ]dioxygenase	product_or_gene
 Protocatechuate dioxygenase	Aromatic compounds	Direct	High	\bpcaG\b|\bpcaH\b|protocatechuate 3,4[- ]dioxygenase	product_or_gene
 Benzoate dioxygenase	Aromatic compounds	Direct	High	\bbenA\b|benzoate 1,2[- ]dioxygenase	product_required
