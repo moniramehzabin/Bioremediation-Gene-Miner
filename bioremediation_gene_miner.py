@@ -521,6 +521,27 @@ def classify_hypothetical_hits(df, meta):
 
     merged["confidence"] = merged.apply(base_confidence, axis=1)
 
+    # Sequence strength cannot exceed the confidence supported by the
+    # curated biological evidence class.
+    def apply_evidence_ceiling(r):
+        confidence = str(r.get("confidence", "Weak"))
+        evidence = str(r.get("Evidence_classes", "")).lower()
+        defaults = str(r.get("Default_confidences", "")).lower()
+
+        if (
+            "low" in defaults
+            and "moderate" not in defaults
+            and "high" not in defaults
+        ):
+            return "Weak"
+
+        if "direct" not in evidence and confidence == "High":
+            return "Moderate"
+
+        return confidence
+
+    merged["confidence"] = merged.apply(apply_evidence_ceiling, axis=1)
+
     merged["fragment_or_partial"] = (
         (merged["reference_coverage_pct"] < 50)
         | (merged["query_len"] < 0.5 * merged["subject_len"])
@@ -1674,6 +1695,33 @@ def main():
         unmatched_diamond_all,
         refmeta,
     )
+
+    # Family-specific validation for annotated proteins proposed as MerA.
+    # MerA requires its conserved catalytic motif and terminal Hg-binding
+    # cysteine pair. Similar flavoprotein oxidoreductases can otherwise
+    # produce strong but functionally misleading DIAMOND matches.
+    if unmatched_best is not None and not unmatched_best.empty:
+        unmatched_sequences = {
+            record.id: str(record.seq).upper()
+            for record in SeqIO.parse(str(unmatched_faa), "fasta")
+        }
+
+        for idx, row in unmatched_best.iterrows():
+            if str(row.get("family_target", "")).lower() != "mera":
+                continue
+
+            query_sequence = unmatched_sequences.get(str(row["query"]), "")
+            catalytic_motif = bool(re.search(r"CVN[IV]GC", query_sequence))
+            terminal_cys_pair = "CC" in query_sequence[-10:]
+
+            if not (catalytic_motif and terminal_cys_pair):
+                unmatched_best.at[idx, "decision"] = "Review"
+                unmatched_best.at[idx, "interpretation"] = (
+                    "MerA-family similarity detected, but conserved catalytic "
+                    "and terminal mercury-binding cysteine features were not "
+                    "both present; retain for review, not as a strong mercuric "
+                    "reductase assignment."
+                )
 
     hyp_best = classify_hypothetical_hits(
         diamond_all,
