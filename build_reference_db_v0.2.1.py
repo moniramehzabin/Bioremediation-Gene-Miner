@@ -7,6 +7,7 @@ from pathlib import Path
 BASE = "https://rest.uniprot.org"
 KB = Path("bioremediation_knowledge_base_v0.2.1.tsv")
 OUT_FASTA = Path("bioremediation_reference_v0.2.1.faa")
+CURATED_EXTERNAL = Path("curated_external_references_v0.2.1.tsv")
 OUT_META = Path("bioremediation_reference_v0.2.1_metadata.tsv")
 MAX_HITS_PER_RULE = 8
 
@@ -45,6 +46,20 @@ with KB.open(encoding="utf-8") as f:
 
 records = {}
 provenance = {}
+qc_review = []
+
+APPROVED_GENE_ALIASES = {
+    "chra": {"chra1"},
+    "merb": {"merb1"},
+    "nahac": {"ndob"},
+    "nahad": {"ndoc"},
+}
+
+# Optional protein-name consistency QC for gene symbols that are reused
+# for biologically different proteins.
+FUNCTION_NAME_QC = {
+    "linb": ("haloalkane dehalogenase",),
+}
 
 for i, rule in enumerate(rules,1):
     q0 = rule["uniprot_query"].strip()
@@ -65,6 +80,58 @@ for i, rule in enumerate(rules,1):
             s=seq(e)
             if not acc or not s:
                 continue
+
+            # QC test: for gene_exact queries, flag results whose primary
+            # gene name does not match the requested gene.
+            if q0.startswith("gene_exact:"):
+                wanted_gene = q0.split(":", 1)[1].strip().lower()
+                returned_genes = [
+                    g.strip().lower()
+                    for g in genes(e).split(";")
+                    if g.strip()
+                ]
+
+                alias_ok = any(
+                    g in APPROVED_GENE_ALIASES.get(wanted_gene, set())
+                    for g in returned_genes
+                )
+
+                if wanted_gene not in returned_genes and not alias_ok:
+                    qc_review.append({
+                        "Accession": acc,
+                        "Requested_gene": wanted_gene,
+                        "Returned_gene": genes(e),
+                        "Protein": protein_name(e),
+                        "Family": rule["family_or_target"],
+                        "Interpretation": rule["interpretation_rule"],
+                        "Source_query": query,
+                    })
+                    print(
+                        f"  [QC-REVIEW] {acc}: wanted={wanted_gene} "
+                        f"returned={genes(e)} | {protein_name(e)}"
+                    )
+                    continue
+
+                # Extra functional-name QC for gene symbols that can refer
+                # to biologically different proteins.
+                required_names = FUNCTION_NAME_QC.get(wanted_gene)
+                if required_names:
+                    returned_protein = protein_name(e).lower()
+                    if not any(name in returned_protein for name in required_names):
+                        qc_review.append({
+                            "Accession": acc,
+                            "Requested_gene": wanted_gene,
+                            "Returned_gene": genes(e),
+                            "Protein": protein_name(e),
+                            "Family": rule["family_or_target"],
+                            "Interpretation": rule["interpretation_rule"],
+                            "Source_query": query,
+                        })
+                        print(
+                            f"  [QC-REVIEW-FUNCTION] {acc}: gene={wanted_gene} "
+                            f"| {protein_name(e)}"
+                        )
+                        continue
             if acc not in records:
                 records[acc] = {
                     "Accession":acc,
@@ -90,6 +157,63 @@ for i, rule in enumerate(rules,1):
     except Exception as ex:
         print("  ! failed:", ex)
     time.sleep(0.2)
+
+
+# Add manually curated external references (for example, verified NCBI proteins).
+if CURATED_EXTERNAL.exists():
+    with CURATED_EXTERNAL.open(encoding="utf-8") as f:
+        for row in csv.DictReader(f, delimiter="\t"):
+            acc = row["Accession"].strip()
+            fasta_source = row["FASTA_file"].strip()
+
+            if not acc or not fasta_source:
+                continue
+
+            if fasta_source.startswith(("http://", "https://")):
+                req = Request(
+                    fasta_source,
+                    headers={"User-Agent": "Bioremediation-Gene-Miner/0.2.1"},
+                )
+                with urlopen(req, timeout=90) as response:
+                    fasta_text = response.read().decode("utf-8")
+            else:
+                fasta_path = Path(fasta_source)
+                if not fasta_path.exists():
+                    continue
+                fasta_text = fasta_path.read_text()
+
+            sequence = "".join(
+                line.strip()
+                for line in fasta_text.splitlines()
+                if not line.startswith(">")
+            )
+
+            if not sequence:
+                continue
+
+            records[acc] = {
+                "Accession": acc,
+                "UniProt_ID": "",
+                "Gene": row["Gene"],
+                "Protein": row["Protein"],
+                "Organism": row["Organism"],
+                "Length_aa": len(sequence),
+                "Sequence": sequence,
+            }
+
+            provenance[acc] = [{
+                "family_or_target": row["family_or_target"],
+                "major_category": row["major_category"],
+                "pollutant_or_role": row["pollutant_or_role"],
+                "evidence_class": row["evidence_class"],
+                "default_confidence": row["default_confidence"],
+                "interpretation_rule": row["interpretation_rule"],
+                "specificity_class": row["specificity_class"],
+                "headline_category_allowed": row["headline_category_allowed"],
+                "source_query": row["source_query"],
+            }]
+
+            print(f"[CURATED] added {acc} ({row['Gene']})")
 
 def choose_headline(ps):
     # only categories from rules allowed to define a headline are considered.
@@ -142,6 +266,22 @@ with OUT_META.open("w", newline="", encoding="utf-8") as f:
             "Interpretation_rules":"; ".join(sorted({p["interpretation_rule"] for p in ps})),
             "Source_queries":"; ".join(sorted({p["source_query"] for p in ps}))
         })
+
+with Path("bioremediation_reference_v0.2.1_QC_review.tsv").open(
+    "w", newline="", encoding="utf-8"
+) as f:
+    fields = [
+        "Accession",
+        "Requested_gene",
+        "Returned_gene",
+        "Protein",
+        "Family",
+        "Interpretation",
+        "Source_query",
+    ]
+    w = csv.DictWriter(f, fieldnames=fields, delimiter="\t")
+    w.writeheader()
+    w.writerows(qc_review)
 
 print("\nDONE")
 print("Unique reference proteins:", len(records))

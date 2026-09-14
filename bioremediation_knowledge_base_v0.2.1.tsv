@@ -66,3 +66,11 @@ uvrB	Stress support	UV/DNA repair	Supporting	Moderate	gene_exact:uvrB	Nucleotide
 uvrC	Stress support	UV/DNA repair	Supporting	Moderate	gene_exact:uvrC	Nucleotide excision repair.	supporting_family	NO
 recA	Stress support	DNA damage response	Supporting	Moderate	gene_exact:recA	SOS/DNA repair.	supporting_family	NO
 lexA	Stress support	DNA damage response	Supporting	Moderate	gene_exact:lexA	SOS regulator.	supporting_family	NO
+silA	Heavy metals	Silver resistance/efflux	Direct	High	gene_exact:silA	RND-type silver efflux transporter; supports Ag(I) resistance by active efflux.	direct_family	YES
+silB	Heavy metals	Silver resistance/efflux	Direct	High	gene_exact:silB	Membrane-fusion component of the SilCBA silver efflux system.	direct_family	YES
+silC	Heavy metals	Silver resistance/efflux	Direct	High	gene_exact:silC	Outer-membrane component of the SilCBA silver efflux system.	direct_family	YES
+silP	Heavy metals	Silver resistance/efflux	Direct	High	gene_exact:silP	P-type ATPase involved in Ag(I) export and silver resistance.	direct_family	YES
+silE	Heavy metals	Silver binding/resistance	Direct	High	gene_exact:silE	Periplasmic silver-binding protein associated with Ag(I) resistance.	direct_family	YES
+silF	Heavy metals	Silver binding/resistance	Direct	High	gene_exact:silF	Silver-binding chaperone associated with Ag(I) trafficking and resistance.	direct_family	YES
+silR	Heavy metals	Silver resistance regulation	Supporting	Moderate	gene_exact:silR	Response regulator controlling expression of the silver-resistance system.	supporting_family	NO
+silS	Heavy metals	Silver resistance regulation	Supporting	Moderate	gene_exact:silS	Sensor histidine kinase regulating the silver-resistance system.	supporting_family	NO

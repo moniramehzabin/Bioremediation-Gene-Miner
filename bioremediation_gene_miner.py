@@ -248,6 +248,62 @@ def screen_annotated(cds, rules):
     return pd.DataFrame(hits)
 
 
+
+def extract_unmatched_annotated(cds, annotated_hits, out_faa):
+    """
+    Export non-hypothetical proteins that were not recovered by the
+    annotation-rule screen.
+
+    These proteins can then be searched against the curated reference DB
+    using the existing DIAMOND family-classification workflow.
+    """
+    matched_loci = set()
+
+    if annotated_hits is not None and not annotated_hits.empty:
+        matched_loci = set(
+            annotated_hits["locus_tag"].astype(str)
+        )
+
+    rows = []
+
+    with open(out_faa, "w", encoding="utf-8") as f:
+        for r in cds:
+            product = r["product"] or ""
+
+            if re.search(
+                r"hypothetical protein|uncharacterized protein|unknown protein",
+                product,
+                re.I,
+            ):
+                continue
+
+            locus_tag = str(r["locus_tag"])
+
+            if locus_tag in matched_loci:
+                continue
+
+            seq = r["translation"]
+            if not seq:
+                continue
+
+            rows.append({
+                "locus_tag": locus_tag,
+                "gene": r["gene"],
+                "product": product,
+                "contig": r["contig"],
+                "protein_length_aa": len(seq),
+            })
+
+            f.write(
+                f">{locus_tag} | original_product={product} "
+                f"| gene={r['gene']} | contig={r['contig']}\n"
+            )
+            for i in range(0, len(seq), 80):
+                f.write(seq[i:i + 80] + "\n")
+
+    return pd.DataFrame(rows)
+
+
 def extract_hypotheticals(cds, out_faa):
     rows = []
 
@@ -986,6 +1042,8 @@ CONF_ORDER = {
 def make_report(
     out_xlsx,
     annotated,
+    unmatched_best,
+    unmatched_meta,
     hyp_best,
     hyp_meta,
     diamond_all,
@@ -1014,6 +1072,72 @@ def make_report(
                 "Evalue": "",
                 "Bitscore": "",
                 "Best_reference": "",
+                "InterPro_status": "NOT_SUBMITTED",
+                "InterPro_analyses": "",
+                "InterPro_accessions": "",
+                "InterPro_domain_support": "",
+                "PANTHER_hits": "",
+                "Pfam_hits": "",
+                "CDD_hits": "",
+                "NCBIfam_hits": "",
+                "PRINTS_hits": "",
+                "Gene3D_hits": "",
+                "SUPERFAMILY_hits": "",
+                "SMART_hits": "",
+                "PROSITE_hits": "",
+                "Other_InterPro_member_hits": "",
+                "Integrated_InterPro_entries": "",
+                "InterPro_GO_terms": "",
+                "InterPro_pathway_records": 0,
+                "InterPro_pathway_evidence": "",
+                "InterPro_coordinates": "",
+                "Resolver_status": "",
+                "Resolver_note": "",
+                "Interpretation": r["interpretation"],
+            })
+
+    if unmatched_best is not None and not unmatched_best.empty:
+        unmatched_lookup = {}
+
+        if (
+            unmatched_meta is not None
+            and not unmatched_meta.empty
+            and "locus_tag" in unmatched_meta.columns
+        ):
+            unmatched_lookup = {
+                str(r["locus_tag"]): r
+                for _, r in unmatched_meta.iterrows()
+            }
+
+        for _, r in unmatched_best.iterrows():
+            locus_tag = str(r["query"])
+            meta = unmatched_lookup.get(locus_tag, {})
+
+            final_rows.append({
+                "Locus_tag": locus_tag,
+                "Gene": meta.get("gene", ""),
+                "Family_target": r.get("family_target", ""),
+                "Product_or_prediction": meta.get("product", ""),
+                "Origin": "Annotated → sequence rescued",
+                "Category": r.get("Headline_category", "Unresolved"),
+                "Evidence_class": r.get("Evidence_classes", ""),
+                "Confidence": r["confidence"],
+                "Match_strength": f"{r['confidence']} match",
+                "Decision": r["decision"],
+                "Evidence_source": (
+                    str(r["evidence_source"])
+                    + " (annotated-unmatched rescue)"
+                ),
+                "Identity_pct": round(float(r["identity_pct"]), 1),
+                "Query_coverage_pct": round(
+                    float(r["query_coverage_pct"]), 1
+                ),
+                "Reference_coverage_pct": round(
+                    float(r["reference_coverage_pct"]), 1
+                ),
+                "Evalue": r["evalue"],
+                "Bitscore": round(float(r["bitscore"]), 1),
+                "Best_reference": r["subject"],
                 "InterPro_status": "NOT_SUBMITTED",
                 "InterPro_analyses": "",
                 "InterPro_accessions": "",
@@ -1167,6 +1291,18 @@ def make_report(
         family_candidates = final.copy()
         interpro_supported = final.copy()
 
+    unmatched_queries = (
+        0
+        if unmatched_best is None or unmatched_best.empty
+        else unmatched_best["query"].nunique()
+    )
+
+    unmatched_family_hits = (
+        0
+        if unmatched_best is None or unmatched_best.empty
+        else len(unmatched_best)
+    )
+
     hyp_queries = (
         0
         if hyp_best is None or hyp_best.empty
@@ -1183,6 +1319,9 @@ def make_report(
         [
             ["Total CDS", total_cds],
             ["Annotated candidate rows", len(annotated)],
+            ["Annotated unmatched proteins screened", len(unmatched_meta)],
+            ["Annotated-unmatched queries with DIAMOND hits", unmatched_queries],
+            ["Family-level annotated rescue rows", unmatched_family_hits],
             ["Hypothetical proteins screened", len(hyp_meta)],
             ["Hypothetical queries with DIAMOND hits", hyp_queries],
             ["Family-level hypothetical hit rows", family_hits],
@@ -1468,6 +1607,20 @@ def main():
     )
     print("[info] annotated candidate rows:", len(annotated))
 
+    unmatched_faa = outdir / "annotated_unmatched.faa"
+    unmatched_meta = extract_unmatched_annotated(
+        cds,
+        annotated,
+        unmatched_faa,
+    )
+
+    unmatched_meta.to_csv(
+        outdir / "annotated_unmatched.tsv",
+        sep="\t",
+        index=False,
+    )
+    print("[info] annotated unmatched proteins:", len(unmatched_meta))
+
     hyp_faa = outdir / "hypothetical_proteins.faa"
     hyp_meta = extract_hypotheticals(cds, hyp_faa)
 
@@ -1477,6 +1630,23 @@ def main():
         index=False,
     )
     print("[info] hypothetical proteins:", len(hyp_meta))
+
+    # Sequence rescue for annotated proteins not recognized by annotation rules.
+    # This is separate from the existing hypothetical-protein rescue pathway.
+    unmatched_diamond_tsv = outdir / "annotated_unmatched_vs_reference.tsv"
+
+    if (
+        not args.skip_diamond
+        and unmatched_faa.exists()
+        and unmatched_faa.stat().st_size > 0
+    ):
+        run_diamond(
+            args.diamond,
+            unmatched_faa,
+            args.reference_db,
+            unmatched_diamond_tsv,
+            args.threads,
+        )
 
     diamond_tsv = outdir / "hypothetical_vs_reference.tsv"
 
@@ -1492,7 +1662,18 @@ def main():
     diamond_all = load_diamond(diamond_tsv)
     print("[info] DIAMOND alignments:", len(diamond_all))
 
+    unmatched_diamond_all = load_diamond(unmatched_diamond_tsv)
+    print(
+        "[info] annotated-unmatched DIAMOND alignments:",
+        len(unmatched_diamond_all),
+    )
+
     refmeta = load_reference_metadata(args.reference_metadata)
+
+    unmatched_best = classify_hypothetical_hits(
+        unmatched_diamond_all,
+        refmeta,
+    )
 
     hyp_best = classify_hypothetical_hits(
         diamond_all,
@@ -1563,6 +1744,8 @@ def main():
     final = make_report(
         report,
         annotated,
+        unmatched_best,
+        unmatched_meta,
         hyp_best,
         hyp_meta,
         diamond_all,
