@@ -1,9 +1,9 @@
 
 # Bioremediation Gene Miner
 
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22046925.svg)](https://doi.org/10.5281/zenodo.22046925)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22046924.svg)](https://doi.org/10.5281/zenodo.22046924)
 
-**Version 0.3.7 — Research Prototype**
+**Version 0.3.8 — Research Prototype**
 
 Bioremediation Gene Miner is a Python/DIAMOND workflow for mining bacterial whole-genome annotations for **annotated and hypothetical proteins** potentially associated with environmental bioremediation.
 
@@ -94,7 +94,7 @@ Candidate assignment is performed at the curated biological-family level rather 
 
 Selected hypothetical candidates requiring additional evaluation can be submitted to EMBL-EBI InterProScan.
 
-Version 0.3.7 can retain compact evidence from:
+Version 0.3.8 can retain compact evidence from:
 
 - PANTHER
 - Pfam
@@ -207,7 +207,7 @@ py bioremediation_gene_miner.py genome.gbk --reference-db bioremediation_referen
 
 ## Automated InterProScan
 
-Version 0.3.7 supports automated submission of selected candidates to the EMBL-EBI InterProScan web service.
+Version 0.3.8 supports automated submission of selected candidates to the EMBL-EBI InterProScan web service.
 
 Example:
 
@@ -400,6 +400,21 @@ Predictions can change when the reference library, annotation rules, external da
 
 ---
 
+## Version 0.3.8
+
+Major changes in v0.3.8 include:
+
+- separate DIAMOND rescue for annotated but unmatched proteins
+- preservation of original gene and product annotations
+- reference-builder gene-name and functional-name QC
+- curated external-reference support
+- expanded silver-resistance references
+- curated PnpA and DyP references
+- evidence-class confidence ceilings
+- MerA-specific validation for annotated-rescue candidates
+
+---
+
 ## Version 0.3.7
 
 Major changes in v0.3.7 include:
@@ -423,7 +438,7 @@ If you use Bioremediation Gene Miner, please cite the software using the reposit
 
 DOI:
 
-**10.5281/zenodo.22046925**
+**10.5281/zenodo.22046924**
 
 ---
 
@@ -435,6 +450,6 @@ This project is distributed under the MIT License. See `LICENSE` for details.
 
 ## Development status
 
-Bioremediation Gene Miner v0.3.7 is a **research prototype**.
+Bioremediation Gene Miner v0.3.8 is a **research prototype**.
 
 The software is intended to support exploratory bacterial WGS analysis, candidate prioritization, and hypothesis generation. Results should be independently reviewed and experimentally validated before biological conclusions are made.

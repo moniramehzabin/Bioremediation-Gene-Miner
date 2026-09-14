@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Bioremediation Gene Miner v0.3.7-release-candidate-frozen
+Bioremediation Gene Miner v0.3.8
 
 Evidence-ranked bacterial WGS screening:
 1) screens already-annotated CDSs using annotation_rules.tsv
@@ -36,7 +36,7 @@ try:
 except Exception:
     SeqIO = None
 
-VERSION = "0.3.7-release-candidate"
+VERSION = "0.3.8"
 
 
 # ============================================================
@@ -966,7 +966,7 @@ INTERPRO_REST_BASE = "https://www.ebi.ac.uk/Tools/services/rest/iprscan5"
 
 def _http_text(url, data=None, timeout=60):
     req = urllib.request.Request(url, data=data, headers={
-        "User-Agent": "Bioremediation-Gene-Miner/0.3.7-release-candidate"
+        "User-Agent": "Bioremediation-Gene-Miner/0.3.8"
     })
     with urllib.request.urlopen(req, timeout=timeout) as response:
         return response.read().decode("utf-8", errors="replace")
@@ -1035,7 +1035,7 @@ def run_interpro_web(fasta_path, email, outdir, poll_seconds=5, timeout_minutes=
 
         req = urllib.request.Request(
             f"{INTERPRO_REST_BASE}/result/{job_id}/tsv",
-            headers={"User-Agent": "Bioremediation-Gene-Miner/0.3.7-release-candidate"},
+            headers={"User-Agent": "Bioremediation-Gene-Miner/0.3.8"},
         )
         with urllib.request.urlopen(req, timeout=120) as response:
             tsv_path.write_bytes(response.read())
