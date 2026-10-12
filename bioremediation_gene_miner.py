@@ -353,6 +353,8 @@ DIAMOND_COLS = [
     "evalue",
     "bitscore",
     "query_coverage_pct",
+    "subject_start",
+    "subject_end",
 ]
 
 
@@ -372,7 +374,7 @@ def run_diamond(diamond, query_faa, db, out_tsv, threads=None):
         "--out", str(out_tsv),
         "--outfmt", "6",
         "qseqid", "sseqid", "pident", "length", "qlen", "slen",
-        "evalue", "bitscore", "qcovhsp",
+        "evalue", "bitscore", "qcovhsp", "sstart", "send",
         "--max-target-seqs", "50",
         "--evalue", "1e-5",
         "--sensitive",
@@ -389,12 +391,14 @@ def load_diamond(path):
     if not Path(path).exists() or Path(path).stat().st_size == 0:
         return pd.DataFrame(columns=DIAMOND_COLS)
 
-    df = pd.read_csv(
-        path,
-        sep="\t",
-        header=None,
-        names=DIAMOND_COLS,
-    )
+    df = pd.read_csv(path, sep="\t", header=None)
+    if df.shape[1] != len(DIAMOND_COLS):
+        raise ValueError(
+            "DIAMOND output lacks reference coordinates. "
+            "Rerun DIAMOND into a new output directory; "
+            "do not reuse old nine-column files."
+        )
+    df.columns = DIAMOND_COLS
 
     numeric_cols = [
         "identity_pct",
@@ -404,12 +408,22 @@ def load_diamond(path):
         "evalue",
         "bitscore",
         "query_coverage_pct",
+        "subject_start",
+        "subject_end",
     ]
     for c in numeric_cols:
         df[c] = pd.to_numeric(df[c], errors="coerce")
 
+    valid = (
+        df["subject_len"].gt(0)
+        & df["subject_start"].between(1, df["subject_len"])
+        & df["subject_end"].between(1, df["subject_len"])
+    )
+    if not valid.all():
+        raise ValueError("Invalid or missing reference alignment coordinates.")
     df["reference_coverage_pct"] = (
-        df["alignment_len"] / df["subject_len"] * 100
+        (df["subject_end"] - df["subject_start"]).abs().add(1)
+        / df["subject_len"] * 100
     ).round(1)
 
     df["accession"] = (
@@ -1701,10 +1715,18 @@ def main():
     # cysteine pair. Similar flavoprotein oxidoreductases can otherwise
     # produce strong but functionally misleading DIAMOND matches.
     if unmatched_best is not None and not unmatched_best.empty:
-        unmatched_sequences = {
-            record.id: str(record.seq).upper()
-            for record in SeqIO.parse(str(unmatched_faa), "fasta")
-        }
+        unmatched_sequences = {}
+        current_id = None
+        with open(unmatched_faa, encoding="utf-8") as fasta:
+            for line in fasta:
+                line = line.strip()
+                if not line:
+                    continue
+                if line.startswith(">"):
+                    current_id = line[1:].split()[0]
+                    unmatched_sequences[current_id] = ""
+                elif current_id is not None:
+                    unmatched_sequences[current_id] += line.upper()
 
         for idx, row in unmatched_best.iterrows():
             if str(row.get("family_target", "")).lower() != "mera":
