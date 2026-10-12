@@ -455,3 +455,29 @@ This project is distributed under the MIT License. See `LICENSE` for details.
 Bioremediation Gene Miner v0.3.8 is a **research prototype**.
 
 The software is intended to support exploratory bacterial WGS analysis, candidate prioritization, and hypothesis generation. Results should be independently reviewed and experimentally validated before biological conclusions are made.
+
+
+## Coverage and reference QC repair
+
+Reference coverage now uses the reference alignment span:
+100 * (abs(send - sstart) + 1) / slen, per reported HSP.
+DIAMOND output includes sstart and send. Old nine-column output is
+rejected; rerun DIAMOND into a new output directory rather than using
+--skip-diamond with old files. Confidence and decision thresholds are unchanged.
+
+The reference builder flags and excludes laccase-target search results
+whose reported protein name does not contain "laccase". This conservative
+name-consistency check is not complete functional validation. It prevents
+the observed PgeF reference from being accepted as a laccase reference.
+
+Existing reference databases are not corrected automatically. Rebuild
+the reference FASTA, metadata and DIAMOND database, preserve the old files,
+and rerun affected analyses. Saved InterPro results may be reused for
+identical protein sequences; newly selected proteins may require additional
+domain analysis.
+
+The annotated-unmatched FASTA reader now uses standard Python rather than
+SeqIO, allowing that step to work when the optional Biopython import fails.
+
+Run regression checks with:
+python -m unittest discover -s tests -p test_repair_regressions.py -v

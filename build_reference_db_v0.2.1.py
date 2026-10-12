@@ -81,6 +81,23 @@ for i, rule in enumerate(rules,1):
             if not acc or not s:
                 continue
 
+            # Broad search results must support the requested laccase label.
+            if (
+                "laccase" in rule["family_or_target"].lower()
+                and "laccase" not in protein_name(e).lower()
+            ):
+                qc_review.append({
+                    "Accession": acc,
+                    "Requested_gene": "",
+                    "Returned_gene": genes(e),
+                    "Protein": protein_name(e),
+                    "Family": rule["family_or_target"],
+                    "Interpretation": "Excluded: protein name does not support laccase assignment",
+                    "Source_query": query,
+                })
+                print(f"  [QC-REVIEW-LACCASE] {acc}: {protein_name(e)}")
+                continue
+
             # QC test: for gene_exact queries, flag results whose primary
             # gene name does not match the requested gene.
             if q0.startswith("gene_exact:"):
