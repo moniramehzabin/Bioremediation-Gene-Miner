@@ -465,10 +465,28 @@ DIAMOND output includes sstart and send. Old nine-column output is
 rejected; rerun DIAMOND into a new output directory rather than using
 --skip-diamond with old files. Confidence and decision thresholds are unchanged.
 
-The reference builder flags and excludes laccase-target search results
-whose reported protein name does not contain "laccase". This conservative
-name-consistency check is not complete functional validation. It prevents
-the observed PgeF reference from being accepted as a laccase reference.
+### Saved reference set
+
+The builder uses the saved 294-protein reference set included in this repository.
+It does not search online. The full reference audit remains unfinished.
+The previous laccase-name filter is no longer used.
+
+From the repository directory, run these commands in order:
+
+    python build_reference_db_v0.2.1.py
+    diamond makedb --in bioremediation_reference_v0.2.1.faa --db bioremediation_reference_v0.2.1
+
+On Windows, python can be replaced with py. If DIAMOND is not on PATH,
+use its executable path. In PowerShell, for example:
+
+    & "C:/path/to/diamond.exe" makedb --in bioremediation_reference_v0.2.1.faa --db bioremediation_reference_v0.2.1
+
+Then use the existing Basic usage or Automated InterProScan commands.
+The reference filenames are unchanged. The .dmnd file is generated locally
+and is not included in Git. Different existing builder outputs must be
+preserved or moved before preparing this reference set.
+
+Gene Miner analysis logic, thresholds and InterPro integration are unchanged.
 
 Existing reference databases are not corrected automatically. Rebuild
 the reference FASTA, metadata and DIAMOND database, preserve the old files,

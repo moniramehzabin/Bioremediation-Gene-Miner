@@ -47,46 +47,6 @@ class CoverageTests(unittest.TestCase):
     def test_empty_output(self):
         self.assertTrue(self.parse("").empty)
 
-class ReferenceQCTests(unittest.TestCase):
-    def check(self, family, protein):
-        tree = ast.parse((ROOT / "build_reference_db_v0.2.1.py").read_text(encoding="utf-8"))
-        guards = [
-            n for n in ast.walk(tree)
-            if isinstance(n, ast.If)
-            and "QC-REVIEW-LACCASE" in ast.unparse(n)
-            and "family_or_target" in ast.unparse(n.test)
-        ]
-        self.assertEqual(len(guards), 1)
-        loop = ast.For(
-            target=ast.Name(id="_entry", ctx=ast.Store()),
-            iter=ast.List(elts=[ast.Constant(value=1)], ctx=ast.Load()),
-            body=[guards[0], ast.parse("accepted.append(acc)").body[0]],
-            orelse=[]
-        )
-        module = ast.fix_missing_locations(ast.Module(body=[loop], type_ignores=[]))
-        ns = {
-            "acc": "TEST", "e": {}, "query": "test",
-            "rule": {"family_or_target": family},
-            "protein_name": lambda e: protein,
-            "genes": lambda e: "pgeF",
-            "qc_review": [], "accepted": [],
-            "print": lambda *args: None
-        }
-        exec(compile(module, "<reference-qc>", "exec"), ns)
-        return ns
-
-    def test_pgef_excluded_from_laccase(self):
-        result = self.check("laccase", "Peptidoglycan editing factor PgeF")
-        self.assertEqual(result["accepted"], [])
-        self.assertEqual(len(result["qc_review"]), 1)
-
-    def test_named_laccase_retained(self):
-        result = self.check("laccase", "Laccase")
-        self.assertEqual(result["accepted"], ["TEST"])
-
-    def test_other_family_unaffected(self):
-        result = self.check("flavin reductase", "Flavin reductase")
-        self.assertEqual(result["accepted"], ["TEST"])
 
 if __name__ == "__main__":
     unittest.main()
