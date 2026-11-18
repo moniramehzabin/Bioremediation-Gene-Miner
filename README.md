@@ -499,3 +499,14 @@ SeqIO, allowing that step to work when the optional Biopython import fails.
 
 Run regression checks with:
 python -m unittest discover -s tests -p test_repair_regressions.py -v
+
+## Use the 413-sequence reference
+
+Run these commands from the repository root with DIAMOND on your PATH. Replace `genome.gbk` with the path to your annotated GenBank file.
+
+```text
+diamond makedb --in reference_updates/2026-11-18_413_sequence_reference/reference.faa --db reference_413
+python bioremediation_gene_miner.py "genome.gbk" --reference-db reference_413 --reference-metadata reference_updates/2026-11-18_413_sequence_reference/reference_metadata.tsv --annotation-rules reference_updates/2026-11-18_413_sequence_reference/annotation_rules.tsv --outdir geneminer_output
+```
+
+These inputs match the 413-sequence reference and annotation rules used in the BLC23O comparison. For optional InterProScan v6 enrichment, add `--interpro-auto --interpro-email your_email@example.org` to the Gene Miner command.

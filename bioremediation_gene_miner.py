@@ -452,7 +452,13 @@ def base_confidence(row):
     pid = float(row.get("identity_pct", 0) or 0)
     qcov = float(row.get("query_coverage_pct", 0) or 0)
     rcov = float(row.get("reference_coverage_pct", 0) or 0)
-    evalue = float(row.get("evalue", 1) or 1)
+    # Zero is a valid E-value; do not replace it with a default.
+    try:
+        evalue = float(row.get("evalue"))
+    except (TypeError, ValueError, OverflowError):
+        evalue = float("inf")
+    if evalue < 0 or evalue != evalue:
+        evalue = float("inf")
     qlen = float(row.get("query_len", 0) or 0)
     slen = float(row.get("subject_len", 0) or 0)
 
@@ -619,10 +625,17 @@ def classify_hypothetical_hits(df, meta):
                 "do not assign full-length function."
             )
 
-        return (
+        message = (
             "Sequence-supported family-level candidate; conserved-domain "
             "validation is recommended before a strong functional call."
         )
+        reference_note = str(r.get("Interpretation_rules", "") or "").strip()
+        if reference_note:
+            message += (
+                " Curated reference scope/caveat (not experimental "
+                "validation of the query): " + reference_note
+            )
+        return message
 
     best["interpretation"] = best.apply(interpretation, axis=1)
 
@@ -651,7 +664,7 @@ def classify_hypothetical_hits(df, meta):
 
 
 # ============================================================
-# Optional InterPro integration
+# Required InterPro workflow stage
 # ============================================================
 
 def load_interpro(path):
@@ -998,70 +1011,12 @@ def _interpro_result_types(job_id):
     return found
 
 def run_interpro_web(fasta_path, email, outdir, poll_seconds=5, timeout_minutes=45):
-    fasta_path, outdir = Path(fasta_path), Path(outdir)
-    status_file = outdir / "interpro_web_status.txt"
-    tsv_path = outdir / "interpro_web.tsv"
-
-    if not fasta_path.exists() or fasta_path.stat().st_size == 0:
-        status_file.write_text("NOT_RUN\tNo Weak+Review candidates.\n", encoding="utf-8")
-        print("[info] InterPro web: no candidates; skipped.")
-        return None
-    if not email:
-        status_file.write_text("NOT_RUN\t--interpro-email missing.\n", encoding="utf-8")
-        print("[warn] --interpro-auto requested but --interpro-email is missing.")
-        return None
-
-    payload = urllib.parse.urlencode({
-        "email": email,
-        "title": "Bioremediation Gene Miner weak-review candidates",
-        "stype": "p",
-        "sequence": fasta_path.read_text(encoding="utf-8"),
-        "goterms": "true",
-        "pathways": "true",
-    }).encode("utf-8")
-
-    try:
-        print("[run] submitting Weak+Review candidates to EMBL-EBI InterProScan...")
-        job_id = _http_text(f"{INTERPRO_REST_BASE}/run/", data=payload, timeout=120).strip()
-        if not job_id:
-            raise RuntimeError("Empty InterProScan job ID.")
-        (outdir / "interpro_job_id.txt").write_text(job_id + "\n", encoding="utf-8")
-        print("[info] InterPro job:", job_id)
-
-        deadline = time.time() + timeout_minutes * 60
-        last = None
-        while time.time() < deadline:
-            status = _http_text(f"{INTERPRO_REST_BASE}/status/{job_id}").strip()
-            if status != last:
-                print("[info] InterPro status:", status)
-                last = status
-            if status == "FINISHED":
-                break
-            if status not in {"QUEUED", "RUNNING", "PENDING"}:
-                raise RuntimeError(f"InterProScan ended with status: {status}")
-            time.sleep(max(3, int(poll_seconds)))
-        else:
-            raise TimeoutError(f"InterProScan exceeded {timeout_minutes} minute timeout.")
-
-        ids = {x.get("identifier", "") for x in _interpro_result_types(job_id)}
-        if "tsv" not in ids:
-            raise RuntimeError("TSV unavailable; result types: " + ", ".join(sorted(ids)))
-
-        req = urllib.request.Request(
-            f"{INTERPRO_REST_BASE}/result/{job_id}/tsv",
-            headers={"User-Agent": "Bioremediation-Gene-Miner/0.3.8"},
-        )
-        with urllib.request.urlopen(req, timeout=120) as response:
-            tsv_path.write_bytes(response.read())
-
-        status_file.write_text(f"FINISHED\t{job_id}\t{tsv_path.name}\n", encoding="utf-8")
-        print("[info] InterPro TSV:", tsv_path.resolve())
-        return str(tsv_path)
-    except Exception as exc:
-        status_file.write_text(f"FAILED\t{type(exc).__name__}: {exc}\n", encoding="utf-8")
-        print(f"[warn] InterPro web failed: {exc}")
-        print("[warn] continuing without InterPro evidence; FASTA preserved.")
-        return None
+    import importlib.util
+    adapter_path = Path(__file__).resolve().with_name("geneminer_interpro_batch.py")
+    spec = importlib.util.spec_from_file_location("geneminer_v6_batch_runtime", adapter_path)
+    adapter = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(adapter)
+    return adapter.run_interpro_batch(fasta_path, email, outdir, poll_seconds, timeout_minutes)
 
 # ============================================================
 # Report creation
@@ -1084,6 +1039,7 @@ def make_report(
     diamond_all,
     interpro,
     total_cds,
+    pet_controls=None,
 ):
     final_rows = []
 
@@ -1097,7 +1053,7 @@ def make_report(
                 "Origin": "Annotated",
                 "Category": r["major_category"],
                 "Evidence_class": r["evidence_class"],
-                "Confidence": r["confidence"],
+                "Sequence match strength": r["confidence"],
                 "Match_strength": f"{r['confidence']} match",
                 "Decision": "Candidate",
                 "Evidence_source": r["evidence_source"],
@@ -1156,7 +1112,7 @@ def make_report(
                 "Origin": "Annotated → sequence rescued",
                 "Category": r.get("Headline_category", "Unresolved"),
                 "Evidence_class": r.get("Evidence_classes", ""),
-                "Confidence": r["confidence"],
+                "Sequence match strength": r["confidence"],
                 "Match_strength": f"{r['confidence']} match",
                 "Decision": r["decision"],
                 "Evidence_source": (
@@ -1173,27 +1129,29 @@ def make_report(
                 "Evalue": r["evalue"],
                 "Bitscore": round(float(r["bitscore"]), 1),
                 "Best_reference": r["subject"],
-                "InterPro_status": "NOT_SUBMITTED",
-                "InterPro_analyses": "",
-                "InterPro_accessions": "",
-                "InterPro_domain_support": "",
-                "PANTHER_hits": "",
-                "Pfam_hits": "",
-                "CDD_hits": "",
-                "NCBIfam_hits": "",
-                "PRINTS_hits": "",
-                "Gene3D_hits": "",
-                "SUPERFAMILY_hits": "",
-                "SMART_hits": "",
-                "PROSITE_hits": "",
-                "Other_InterPro_member_hits": "",
-                "Integrated_InterPro_entries": "",
-                "InterPro_GO_terms": "",
-                "InterPro_pathway_records": 0,
-                "InterPro_pathway_evidence": "",
-                "InterPro_coordinates": "",
-                "Resolver_status": "",
-                "Resolver_note": "",
+                "InterPro_status": r.get("interpro_status", "NOT_SUBMITTED"),
+                "InterPro_analyses": r.get("interpro_analyses", ""),
+                "InterPro_accessions": r.get("interpro_accessions", ""),
+                "InterPro_domain_support": r.get("interpro_support", ""),
+                "PANTHER_hits": r.get("panther_hits", ""),
+                "Pfam_hits": r.get("pfam_hits", ""),
+                "CDD_hits": r.get("cdd_hits", ""),
+                "NCBIfam_hits": r.get("ncbifam_hits", ""),
+                "PRINTS_hits": r.get("prints_hits", ""),
+                "Gene3D_hits": r.get("gene3d_hits", ""),
+                "SUPERFAMILY_hits": r.get("superfamily_hits", ""),
+                "SMART_hits": r.get("smart_hits", ""),
+                "PROSITE_hits": r.get("prosite_hits", ""),
+                "Other_InterPro_member_hits": r.get("other_interpro_member_hits", ""),
+                "Integrated_InterPro_entries": r.get("integrated_interpro_entries", ""),
+                "InterPro_GO_terms": r.get("interpro_go_terms", ""),
+                "InterPro_pathway_records": 0 if not str(r.get("interpro_pathways", "") or "").strip()
+                    else len([x for x in str(r.get("interpro_pathways", "")).split("; ") if x.strip()]),
+                "InterPro_pathway_evidence": "See InterPro_Full_Report.xlsx and interpro_web.tsv"
+                    if str(r.get("interpro_pathways", "") or "").strip() else "",
+                "InterPro_coordinates": r.get("interpro_coordinates", ""),
+                "Resolver_status": r.get("resolver_status", "UNINFORMATIVE"),
+                "Resolver_note": r.get("resolver_note", ""),
                 "Interpretation": r["interpretation"],
             })
 
@@ -1213,7 +1171,7 @@ def make_report(
                 "Origin": "Hypothetical → predicted",
                 "Category": r.get("Headline_category", "Unresolved"),
                 "Evidence_class": r.get("Evidence_classes", ""),
-                "Confidence": r["confidence"],
+                "Sequence match strength": r["confidence"],
                 "Match_strength": f"{r['confidence']} match",
                 "Decision": r["decision"],
                 "Evidence_source": r["evidence_source"],
@@ -1266,10 +1224,30 @@ def make_report(
             })
 
     final = pd.DataFrame(final_rows)
+    if not final.empty and pet_controls is not None and not pet_controls.empty:
+        notes = {
+            "REVIEW_EXACT_ASSAY_NEGATIVE_CONTROL_SEQUENCE":
+                "Exact assay-negative sequence match. No PET activity was detected under the tested conditions.",
+            "REVIEW_ASSAY_NEGATIVE_SEQUENCE_WITH_X":
+                "Matches an assay-negative sequence record containing an unresolved residue (X). "
+                "No PET activity was detected under the tested conditions.",
+            "REVIEW_CONFLICTING_EXACT_CONTROL_LABELS":
+                "Matching sequence records have conflicting PET assay labels.",
+        }
+        review_by_id = pet_controls.set_index("Locus_tag")["PET_control_flag"].map(notes)
+        reasons = final["Locus_tag"].astype(str).map(review_by_id)
+        families = final["Family_target"].fillna("").str.strip().str.casefold()
+        is_pet = families.eq("petase") | families.str.startswith("pet hydrolase")
+        review = is_pet & reasons.notna() & final["Decision"].eq("Candidate")
+        final.loc[review, "Decision"] = "Review"
+        final.loc[review, "Interpretation"] = (
+            final.loc[review, "Interpretation"].fillna("").astype(str).str.strip()
+            + " " + reasons[review]
+        ).str.strip()
 
     if not final.empty:
         final["_rank"] = (
-            final["Confidence"].map(CONF_ORDER).fillna(9)
+            final["Sequence match strength"].map(CONF_ORDER).fillna(9)
         )
         final = (
             final.sort_values(
@@ -1286,7 +1264,7 @@ def make_report(
 
     if not final.empty:
         high = final[
-            (final["Confidence"] == "High")
+            (final["Sequence match strength"] == "High")
             & (final["Decision"] == "Candidate")
         ].copy()
 
@@ -1522,39 +1500,332 @@ def make_report(
     return final
 
 
-def export_interpro_candidates(cds, hyp_best, out_faa):
-    if hyp_best is None or hyp_best.empty:
-        Path(out_faa).write_text("", encoding="utf-8")
-        return
 
-    wanted = set(
-        hyp_best.loc[
-            (hyp_best["decision"] == "Review")
-            & (hyp_best["confidence"] == "Weak"),
-            "query",
-        ].astype(str)
+def export_interpro_candidates(cds, hyp_best, out_faa, unmatched_best=None):
+    """Export every Review protein from both DIAMOND routes."""
+    selected = []
+    wanted = set()
+
+    for route, frame in [
+        ("Hypothetical", hyp_best),
+        ("Annotated sequence rescue", unmatched_best),
+    ]:
+        if frame is None or frame.empty:
+            continue
+        for _, row in frame.iterrows():
+            if str(row.get("decision", "")).strip() != "Review":
+                continue
+            query = str(row.get("query", "")).strip()
+            if not query:
+                raise ValueError("Review row has no protein identifier.")
+            wanted.add(query)
+            selected.append({
+                "Protein": query,
+                "Route": route,
+                "Family": row.get("family_target", ""),
+                "Sequence_match_strength": row.get("confidence", ""),
+                "Decision": "Review",
+            })
+
+    seqmap = {}
+    for row in cds:
+        locus = str(row.get("locus_tag", ""))
+        sequence = str(row.get("translation", "") or "").strip()
+        if locus in seqmap and sequence and seqmap[locus] != sequence:
+            raise ValueError("Conflicting sequences for identifier: " + locus)
+        if sequence:
+            seqmap[locus] = sequence
+
+    missing = sorted(wanted - set(seqmap))
+    if missing:
+        raise ValueError(
+            "Review proteins lack sequences: " + ", ".join(missing)
+        )
+
+    with open(out_faa, "w", encoding="utf-8") as handle:
+        for query in sorted(wanted):
+            handle.write(">" + query + "\n")
+            sequence = seqmap[query]
+            for start in range(0, len(sequence), 80):
+                handle.write(sequence[start:start + 80] + "\n")
+
+    with Path(out_faa).with_suffix(".selection.tsv").open(
+        "w", encoding="utf-8", newline=""
+    ) as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=[
+                "Protein", "Route", "Family",
+                "Sequence_match_strength", "Decision"
+            ],
+            delimiter="\t",
+        )
+        writer.writeheader()
+        writer.writerows(selected)
+
+
+def attach_interpro_to_route(best, ip, searched):
+    """Attach evidence without changing prediction decisions or strength."""
+    if best is None or best.empty:
+        return best
+
+    before = best[["decision", "confidence"]].copy()
+    result = add_interpro_support(best, ip)
+    result["interpro_status"] = "NOT_SUBMITTED"
+    result.loc[
+        result["query"].astype(str).isin(searched), "interpro_status"
+    ] = "NO_HITS"
+    result.loc[
+        result["interpro_detected"].eq(True), "interpro_status"
+    ] = "HITS_FOUND"
+
+    result = resolve_interpro_evidence(result)
+    not_submitted = result["interpro_status"].eq("NOT_SUBMITTED")
+    result.loc[not_submitted, "resolver_status"] = ""
+    result.loc[not_submitted, "resolver_note"] = ""
+
+    no_hits = result["interpro_status"].eq("NO_HITS")
+    result.loc[no_hits, "resolver_status"] = "UNINFORMATIVE"
+    result.loc[no_hits, "resolver_note"] = (
+        "Protein was searched by InterPro, but no usable hits were returned."
     )
 
-    seqmap = {
-        r["locus_tag"]: r["translation"]
-        for r in cds
-        if r["translation"]
-    }
+    if not result[["decision", "confidence"]].equals(before):
+        raise RuntimeError("InterPro attachment changed prediction decisions.")
+    return result
 
-    with open(out_faa, "w", encoding="utf-8") as f:
-        for locus in sorted(wanted):
-            seq = seqmap.get(locus, "")
-            if not seq:
-                continue
-
-            f.write(f">{locus}\n")
-            for i in range(0, len(seq), 80):
-                f.write(seq[i:i + 80] + "\n")
 
 
 # ============================================================
 # CLI
 # ============================================================
+
+
+def apply_merA_sequence_safeguard(best, fasta_path):
+    """Apply the existing MerA sequence check to either DIAMOND route."""
+    if best is None or best.empty:
+        return best
+
+    best = best.copy()
+    sequences = {
+        record.id: str(record.seq).upper()
+        for record in SeqIO.parse(str(fasta_path), "fasta")
+    }
+
+    for idx, row in best.iterrows():
+        if str(row.get("family_target", "")).strip().lower() != "mera":
+            continue
+
+        # Preserve rejection safeguards; never promote rejected matches.
+        if str(row.get("decision", "")).strip().lower() == "reject":
+            continue
+
+        sequence = sequences.get(str(row.get("query", "")), "")
+        catalytic_motif = bool(re.search(r"CVN[IV]GC", sequence))
+        terminal_cys_pair = "CC" in sequence[-10:]
+
+        if not (catalytic_motif and terminal_cys_pair):
+            best.at[idx, "decision"] = "Review"
+            existing = str(row.get("interpretation", "") or "").strip()
+            note = (
+                "MerA sequence safeguard: the existing catalytic-motif "
+                "and terminal cysteine-pair criteria were not both met. "
+                "Retain for review; do not accept a MerA assignment from "
+                "similarity alone. Failure of this screen does not prove "
+                "absence of mercury-reduction activity."
+            )
+            best.at[idx, "interpretation"] = (
+                existing + " " + note
+            ).strip()
+
+    return best
+
+
+def _pet_control_flag(active_score, negative_score, exact_labels):
+    if len(exact_labels) > 1:
+        return "REVIEW_CONFLICTING_EXACT_CONTROL_LABELS"
+    if exact_labels:
+        if "ACTIVE_IN_ASSAY_PANEL" in exact_labels:
+            return "EXACT_ACTIVE_CONTROL_SEQUENCE"
+        return "REVIEW_EXACT_ASSAY_NEGATIVE_CONTROL_SEQUENCE"
+    if negative_score > active_score:
+        return "REVIEW_NEGATIVE_CONTROL_SIMILARITY"
+    if negative_score > 0:
+        return "REVIEW_BOTH_CONTROL_CLASSES_MATCH"
+    if active_score > 0:
+        return "ACTIVE_CONTROL_SIMILARITY_ONLY"
+    return "NO_QUALIFYING_CONTROL_MATCH"
+
+
+def _pet_control_evidence(cds, annotated, hyp_best, unmatched_best,
+                          outdir, diamond, threads):
+    import hashlib
+    import json
+    import shutil
+
+    root = Path(__file__).resolve().parent / "pet_activity_controls"
+    if not root.is_dir():
+        raise RuntimeError("Connected PET control database is missing.")
+
+    manifest = json.loads(
+        (root / "MANIFEST.json").read_text(encoding="utf-8")
+    )
+    for name, expected in manifest.items():
+        actual = hashlib.sha256((root / name).read_bytes()).hexdigest()
+        if actual != expected:
+            raise RuntimeError("PET control file changed: " + name)
+
+    # Select existing PET-related candidates from all three routes.
+    selected = set()
+    for frame, id_col, family_col in [
+        (annotated, "locus_tag", "family"),
+        (hyp_best, "query", "family_target"),
+        (unmatched_best, "query", "family_target"),
+    ]:
+        if frame is None or frame.empty:
+            continue
+        if id_col not in frame or family_col not in frame:
+            raise RuntimeError("Unexpected PET candidate-table structure.")
+        for _, row in frame.iterrows():
+            family = str(row[family_col])
+            if re.search(r"\b(?:PET(?:ase)?|lipase|cutinase)\b", family, re.I):
+                if str(row.get("decision", "")).lower() != "reject":
+                    selected.add(str(row[id_col]))
+
+    columns = [
+        "Locus_tag", "PET_control_flag",
+        "Active_control", "Active_source_ID", "Active_similarity",
+        "Assay_negative_control", "Assay_negative_source_ID",
+        "Assay_negative_similarity", "Exact_control_labels", "Scope",
+    ]
+    output = Path(outdir) / "PET_control_comparison.tsv"
+    if not selected:
+        result = pd.DataFrame(columns=columns)
+        result.to_csv(output, sep="\t", index=False)
+        return result
+
+    sequences = {}
+    for row in cds:
+        name = str(row.get("locus_tag", ""))
+        if name not in selected:
+            continue
+        sequence = "".join(
+            str(row.get("translation", "")).split()
+        ).upper().rstrip("*")
+        if not sequence:
+            raise RuntimeError("PET query lacks a translation: " + name)
+        if name in sequences and sequences[name] != sequence:
+            raise RuntimeError("Conflicting PET query identifier: " + name)
+        sequences[name] = sequence
+
+    if set(sequences) != selected:
+        raise RuntimeError("Not every PET query has a CDS translation.")
+
+    aliases = {f"PETQUERY{i:06d}": name
+               for i, name in enumerate(sorted(sequences), 1)}
+    query = Path(outdir) / "pet_control_queries.faa"
+    query.write_text(
+        "".join(">" + alias + "\n" + sequences[name] + "\n"
+                for alias, name in aliases.items()),
+        encoding="ascii"
+    )
+
+    executable = (
+        str(diamond) if Path(str(diamond)).is_file()
+        else shutil.which(str(diamond))
+    )
+    if not executable:
+        fallback = Path(
+            r"F:\Tools\EBPT_USER_TEST\diamond-windows\diamond.exe"
+        )
+        executable = str(fallback) if fallback.is_file() else None
+    if not executable:
+        raise RuntimeError("DIAMOND unavailable for PET control comparison.")
+
+    raw = Path(outdir) / "pet_control_alignments.tsv"
+    command = [
+        executable, "blastp", "--query", str(query),
+        "--db", str(root / "controls.dmnd"), "--out", str(raw),
+        "--outfmt", "6", "qseqid", "sseqid", "pident",
+        "qcovhsp", "slen", "sstart", "send", "evalue",
+        "--max-target-seqs", "0", "--max-hsps", "1",
+        "--evalue", "1e-5", "--sensitive",
+    ]
+    if threads:
+        command += ["--threads", str(threads)]
+    with (Path(outdir) / "PET_control_search.log").open(
+        "w", encoding="utf-8"
+    ) as log:
+        subprocess.run(command, check=True, stdout=log,
+                       stderr=subprocess.STDOUT)
+
+    metadata = pd.read_csv(
+        root / "controls.tsv", sep="\t", keep_default_na=False
+    ).set_index("ControlID").to_dict("index")
+    best = {name: {} for name in selected}
+    exact = {name: set() for name in selected}
+    exact_with_x = set()
+
+    # Use literal sequence hashes for exact matches.
+    for name, sequence in sequences.items():
+        digest = hashlib.sha256(sequence.encode("ascii")).hexdigest()
+        for control in metadata.values():
+            if str(control["SequenceSHA256"]).lower() != digest:
+                continue
+            exact[name].add(control["AssayLabel"])
+            if str(control["ContainsX"]).lower() == "true":
+                exact_with_x.add(name)
+
+    with raw.open(encoding="utf-8", newline="") as handle:
+        for values in csv.reader(handle, delimiter="\t"):
+            if not values:
+                continue
+            if len(values) != 8:
+                raise RuntimeError("Unexpected PET control alignment format.")
+            alias, control_id = values[:2]
+            name = aliases[alias]
+            control = metadata[control_id]
+            if str(control["ContainsX"]).lower() == "true":
+                continue
+            pid, qcov, slen, start, end, evalue = map(float, values[2:])
+            if slen <= 0:
+                raise RuntimeError("Invalid PET control alignment length.")
+            rcov = min(100.0, (abs(end-start)+1) / slen * 100)
+            # Broad comparison safeguards; not an activity classifier.
+            if pid < 25 or qcov < 50 or rcov < 50 or evalue > 1e-5:
+                continue
+            score = (pid / 100.0) * (min(qcov, rcov) / 100.0)
+            label = control["AssayLabel"]
+            old = best[name].get(label, (0.0, "", ""))
+            item = (score, control_id, control["SourceID"])
+            if score > old[0]:
+                best[name][label] = item
+
+    rows = []
+    for name in sorted(selected):
+        active = best[name].get("ACTIVE_IN_ASSAY_PANEL", (0.0, "", ""))
+        negative = best[name].get(
+            "NO_ACTIVITY_DETECTED_IN_ASSAY_PANEL", (0.0, "", "")
+        )
+        flag = _pet_control_flag(active[0], negative[0], exact[name])
+        if name in exact_with_x:
+            if flag == "REVIEW_EXACT_ASSAY_NEGATIVE_CONTROL_SEQUENCE":
+                flag = "REVIEW_ASSAY_NEGATIVE_SEQUENCE_WITH_X"
+            elif flag == "EXACT_ACTIVE_CONTROL_SEQUENCE":
+                flag = "ASSAY_ACTIVE_SEQUENCE_WITH_X"
+        rows.append([
+            name, flag,
+            active[1], active[2], active[0],
+            negative[1], negative[2], negative[0],
+            ";".join(sorted(exact[name])),
+            "Exact assay-negative or conflicting sequence records route PET calls to Review. "
+            "Assay-negative means no detected activity under tested conditions.",
+        ])
+    result = pd.DataFrame(rows, columns=columns)
+    result.to_csv(output, sep="\t", index=False)
+    print("[info] PET control comparison:", output)
+    return result
+
 
 def main():
     ap = argparse.ArgumentParser(
@@ -1595,16 +1866,16 @@ def main():
 
     ap.add_argument(
         "--interpro",
-        help="Optional InterProScan TSV for selected hypothetical candidates",
+        help="Optional InterProScan TSV for selected Review candidates",
     )
     ap.add_argument(
         "--interpro-auto",
         action="store_true",
-        help="Automatically submit Weak+Review candidates to EMBL-EBI InterProScan REST.",
+        help="Automatically submit Review candidates to EMBL-EBI InterProScan REST.",
     )
     ap.add_argument("--interpro-email", help="Email required by EMBL-EBI Job Dispatcher.")
     ap.add_argument("--interpro-poll-seconds", type=int, default=5)
-    ap.add_argument("--interpro-timeout-minutes", type=int, default=45)
+    ap.add_argument("--interpro-timeout-minutes", type=int, default=180)
 
     ap.add_argument(
         "--outdir",
@@ -1623,6 +1894,24 @@ def main():
     )
 
     args = ap.parse_args()
+
+    # InterPro is optional enrichment; core reports do not require the service.
+
+    if args.interpro:
+        supplied_interpro = Path(args.interpro)
+        if not supplied_interpro.is_file():
+            ap.error("The supplied InterPro TSV does not exist.")
+        # A hit-only TSV cannot prove completion for absent proteins.
+        # Require readable, nonempty parsed evidence for this import route.
+        supplied_evidence = load_interpro(args.interpro)
+        if supplied_evidence.empty:
+            ap.error(
+                "The supplied InterPro TSV has no readable hit records. "
+                "An empty file alone cannot establish a completed search."
+            )
+    elif args.interpro_auto and not args.interpro_email:
+        ap.error("--interpro-auto requires --interpro-email.")
+
 
     outdir = Path(args.outdir)
     outdir.mkdir(parents=True, exist_ok=True)
@@ -1710,45 +1999,16 @@ def main():
         refmeta,
     )
 
-    # Family-specific validation for annotated proteins proposed as MerA.
-    # MerA requires its conserved catalytic motif and terminal Hg-binding
-    # cysteine pair. Similar flavoprotein oxidoreductases can otherwise
-    # produce strong but functionally misleading DIAMOND matches.
-    if unmatched_best is not None and not unmatched_best.empty:
-        unmatched_sequences = {}
-        current_id = None
-        with open(unmatched_faa, encoding="utf-8") as fasta:
-            for line in fasta:
-                line = line.strip()
-                if not line:
-                    continue
-                if line.startswith(">"):
-                    current_id = line[1:].split()[0]
-                    unmatched_sequences[current_id] = ""
-                elif current_id is not None:
-                    unmatched_sequences[current_id] += line.upper()
-
-        for idx, row in unmatched_best.iterrows():
-            if str(row.get("family_target", "")).lower() != "mera":
-                continue
-
-            query_sequence = unmatched_sequences.get(str(row["query"]), "")
-            catalytic_motif = bool(re.search(r"CVN[IV]GC", query_sequence))
-            terminal_cys_pair = "CC" in query_sequence[-10:]
-
-            if not (catalytic_motif and terminal_cys_pair):
-                unmatched_best.at[idx, "decision"] = "Review"
-                unmatched_best.at[idx, "interpretation"] = (
-                    "MerA-family similarity detected, but conserved catalytic "
-                    "and terminal mercury-binding cysteine features were not "
-                    "both present; retain for review, not as a strong mercuric "
-                    "reductase assignment."
-                )
+    unmatched_best = apply_merA_sequence_safeguard(
+        unmatched_best, unmatched_faa
+    )
 
     hyp_best = classify_hypothetical_hits(
         diamond_all,
         refmeta,
     )
+
+    hyp_best = apply_merA_sequence_safeguard(hyp_best, hyp_faa)
 
     if hyp_best is not None and not hyp_best.empty:
         print(
@@ -1760,54 +2020,53 @@ def main():
             hyp_best["family_target"].nunique(),
         )
 
+    pet_controls = _pet_control_evidence(
+        cds, annotated, hyp_best, unmatched_best,
+        outdir, args.diamond, args.threads
+    )
+
     interpro_faa = outdir / "interpro_candidates.faa"
-    export_interpro_candidates(cds, hyp_best, interpro_faa)
+    export_interpro_candidates(
+        cds, hyp_best, interpro_faa, unmatched_best=unmatched_best
+    )
 
-    interpro_input = args.interpro
-    if args.interpro_auto and args.interpro:
-        print("[warn] --interpro supplied; skipping automatic web submission.")
-    elif args.interpro_auto:
-        interpro_input = run_interpro_web(
-            interpro_faa, args.interpro_email, outdir,
-            args.interpro_poll_seconds, args.interpro_timeout_minutes,
-        )
+    from geneminer_interpro_fallback import (
+        fasta_ids, pending_state, save_status, status_sheet, mark_unresolved,
+        optional_interpro, preserve_old_full_report,
+    )
+    selected_interpro_ids = fasta_ids(interpro_faa)
+    interpro_state = pending_state(args, selected_interpro_ids)
+    save_status(outdir, interpro_state)
 
+    # Always write usable core results BEFORE waiting for an optional service.
+    core_ip = pd.DataFrame()
+    core_hyp = attach_interpro_to_route(hyp_best, core_ip, set())
+    core_unmatched = attach_interpro_to_route(unmatched_best, core_ip, set())
+    core_hyp = mark_unresolved(core_hyp, selected_interpro_ids,
+                               interpro_state["Stage"], interpro_state["Note"])
+    core_unmatched = mark_unresolved(core_unmatched, selected_interpro_ids,
+                                     interpro_state["Stage"], interpro_state["Note"])
+    core_report = outdir / "Bioremediation_Gene_Miner_Core_Report.xlsx"
+    make_report(core_report, annotated, core_unmatched, unmatched_meta,
+                core_hyp, hyp_meta, diamond_all, core_ip, len(cds), pet_controls=pet_controls)
+    status_sheet(core_report, interpro_state, pd)
+    print("[info] Core report available now:", core_report.resolve())
+
+    interpro_input, interpro_state, submitted_interpro = optional_interpro(
+        args, interpro_faa, outdir, run_interpro_web
+    )
+    preserve_old_full_report(outdir, interpro_state["Stage"])
     ip = load_interpro(interpro_input)
-    hyp_best = add_interpro_support(hyp_best, ip)
-
-    # Distinguish proteins not submitted to InterPro from submitted proteins
-    # that returned no usable hits. This avoids misleading FALSE values.
-    submitted_interpro = set()
-    if interpro_faa.exists() and interpro_faa.stat().st_size > 0:
-        with open(interpro_faa, encoding="utf-8") as _f:
-            for _line in _f:
-                if _line.startswith(">"):
-                    submitted_interpro.add(_line[1:].strip().split()[0])
-
-    if hyp_best is not None and not hyp_best.empty:
-        hyp_best.loc[
-            hyp_best["query"].astype(str).isin(submitted_interpro),
-            "interpro_status",
-        ] = "NO_HITS"
-        hyp_best.loc[
-            hyp_best["interpro_detected"].eq(True),
-            "interpro_status",
-        ] = "HITS_FOUND"
-
-    hyp_best = resolve_interpro_evidence(hyp_best)
-
-    # Resolver has exactly four categories only for submitted/evaluated proteins.
-    # Non-submitted candidates keep resolver fields blank.
-    if hyp_best is not None and not hyp_best.empty:
-        not_submitted = hyp_best["interpro_status"].eq("NOT_SUBMITTED")
-        hyp_best.loc[not_submitted, "resolver_status"] = ""
-        hyp_best.loc[not_submitted, "resolver_note"] = ""
-
-        no_hits = hyp_best["interpro_status"].eq("NO_HITS")
-        hyp_best.loc[no_hits, "resolver_status"] = "UNINFORMATIVE"
-        hyp_best.loc[no_hits, "resolver_note"] = (
-            "Protein was submitted to InterPro, but no usable InterPro evidence was returned."
-        )
+    hyp_best = attach_interpro_to_route(hyp_best, ip, submitted_interpro)
+    unmatched_best = attach_interpro_to_route(
+        unmatched_best, ip, submitted_interpro
+    )
+    hyp_best = mark_unresolved(hyp_best, selected_interpro_ids,
+                                interpro_state["Stage"], interpro_state["Note"],
+        completed=submitted_interpro, protein_states=interpro_state.get("ProteinStates", {}))
+    unmatched_best = mark_unresolved(unmatched_best, selected_interpro_ids,
+                                      interpro_state["Stage"], interpro_state["Note"],
+        completed=submitted_interpro, protein_states=interpro_state.get("ProteinStates", {}))
 
     report = outdir / "Bioremediation_Gene_Miner_Report.xlsx"
 
@@ -1821,7 +2080,19 @@ def main():
         diamond_all,
         ip,
         len(cds),
+        pet_controls=pet_controls,
     )
+
+    status_sheet(report, interpro_state, pd)
+    print("[info] InterPro enrichment:", interpro_state["Stage"])
+
+    with pd.ExcelWriter(
+        report, engine="openpyxl", mode="a",
+        if_sheet_exists="replace"
+    ) as pet_writer:
+        pet_controls.to_excel(
+            pet_writer, sheet_name="PET_control_comparison", index=False
+        )
 
     # Separate complete InterPro workbook.
     # The raw interpro_web.tsv remains the lossless source file.
@@ -1883,15 +2154,22 @@ def main():
                 "prosite_hits", "integrated_interpro_entries", "interpro_go_terms",
                 "interpro_coordinates", "resolver_status", "resolver_note",
             ]
-            available = [c for c in summary_cols if c in hyp_best.columns]
+            summary_frames = [frame for frame in [hyp_best, unmatched_best]
+                              if frame is not None and not frame.empty]
+            summary_best = (pd.concat(summary_frames, ignore_index=True)
+                            if summary_frames else pd.DataFrame())
+            available = [c for c in summary_cols if c in summary_best.columns]
             if available:
                 _excel_chunk_table(
-                    hyp_best[available].drop_duplicates()
+                    summary_best[available].drop_duplicates()
                 ).to_excel(
                     ip_writer, sheet_name="Protein_hit_summary", index=False
                 )
 
         print(f"[info] Full InterPro report: {interpro_full_xlsx}")
+
+    if interpro_full_xlsx.is_file():
+        status_sheet(interpro_full_xlsx, interpro_state, pd)
 
     print("\nDONE")
     print("Report:", report.resolve())
@@ -1904,7 +2182,7 @@ def main():
             "High-confidence:",
             int(
                 (
-                    (final["Confidence"] == "High")
+                    (final["Sequence match strength"] == "High")
                     & (final["Decision"] == "Candidate")
                 ).sum()
             ),
