@@ -465,7 +465,7 @@ If you use Bioremediation Gene Miner, please cite the software using the reposit
 
 DOI:
 
-**v4.0.1: version DOI pending Zenodo archiving.**
+**Latest release (v4.0.1): 10.5281/zenodo.24389979**
 
 Previous release (v4.0): **10.5281/zenodo.24387914**
 
