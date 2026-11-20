@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Bioremediation Gene Miner v4.0
+Bioremediation Gene Miner v4.0.1
 
 Evidence-ranked bacterial WGS screening:
 1) screens already-annotated CDSs using annotation_rules.tsv
@@ -36,7 +36,7 @@ try:
 except Exception:
     SeqIO = None
 
-VERSION = "4.0"
+VERSION = "4.0.1"
 
 
 # ============================================================
@@ -993,7 +993,7 @@ INTERPRO_REST_BASE = "https://www.ebi.ac.uk/Tools/services/rest/iprscan5"
 
 def _http_text(url, data=None, timeout=60):
     req = urllib.request.Request(url, data=data, headers={
-        "User-Agent": "Bioremediation-Gene-Miner/4.0"
+        "User-Agent": "Bioremediation-Gene-Miner/4.0.1"
     })
     with urllib.request.urlopen(req, timeout=timeout) as response:
         return response.read().decode("utf-8", errors="replace")

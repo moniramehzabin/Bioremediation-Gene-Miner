@@ -1,0 +1,6 @@
+# Preserve the exact bytes used by the PET control checksums.
+/pet_activity_controls/controls.faa text eol=lf
+/pet_activity_controls/controls.tsv text eol=lf
+/pet_activity_controls/ORIGINAL_LABEL_DATA.csv text eol=lf
+/pet_activity_controls/MANIFEST.json text eol=lf
+/pet_activity_controls/controls.dmnd -text
