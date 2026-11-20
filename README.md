@@ -3,7 +3,7 @@
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22046924.svg)](https://doi.org/10.5281/zenodo.22046924)
 
-**Version 0.3.8 — Research Prototype**
+**Version 4.0 — Research Prototype**
 
 Bioremediation Gene Miner is a Python/DIAMOND workflow for mining bacterial whole-genome annotations for **annotated and hypothetical proteins** potentially associated with environmental bioremediation.
 
@@ -94,7 +94,7 @@ Candidate assignment is performed at the curated biological-family level rather 
 
 Selected hypothetical candidates requiring additional evaluation can be submitted to EMBL-EBI InterProScan.
 
-Version 0.3.8 can retain compact evidence from:
+Version 4.0 can retain compact evidence from:
 
 - PANTHER
 - Pfam
@@ -207,7 +207,7 @@ py bioremediation_gene_miner.py genome.gbk --reference-db bioremediation_referen
 
 ## Automated InterProScan
 
-Version 0.3.8 supports automated submission of selected candidates to the EMBL-EBI InterProScan web service.
+Version 4.0 supports automated submission of selected candidates to the EMBL-EBI InterProScan web service.
 
 Example:
 
@@ -400,6 +400,22 @@ Predictions can change when the reference library, annotation rules, external da
 
 ---
 
+## Version 4.0
+
+Release date: 2026-11-20
+
+- Add a Windows launcher for selecting annotated GenBank files and running Gene Miner.
+- Add foreground InterPro recovery with saved job IDs, cached results, bounded read retries and individual failure handling.
+- Support InterProScan v6 REST submission and validated result downloads.
+- Include the 413-sequence reference snapshot and matching annotation rules.
+- Add PET assay-control evidence and Review routing for exact assay-negative PET control matches.
+
+Requires Python 3 with Tkinter and a Windows DIAMOND executable.
+Open windows_launcher/Run Gene Miner.cmd for a new analysis.
+Open windows_launcher/Resume InterPro.cmd to continue saved InterPro scans.
+
+This release remains a research prototype.
+
 ## Version 0.3.8
 
 Major changes in v0.3.8 include:
@@ -438,7 +454,9 @@ If you use Bioremediation Gene Miner, please cite the software using the reposit
 
 DOI:
 
-**Latest release (v0.3.8): 10.5281/zenodo.22745315**
+**v4.0: version DOI pending Zenodo archiving.**
+
+Previous release (v0.3.8): **10.5281/zenodo.22745315**
 
 Permanent project DOI: **10.5281/zenodo.22046924**
 
@@ -452,7 +470,7 @@ This project is distributed under the MIT License. See `LICENSE` for details.
 
 ## Development status
 
-Bioremediation Gene Miner v0.3.8 is a **research prototype**.
+Bioremediation Gene Miner v4.0 is a **research prototype**.
 
 The software is intended to support exploratory bacterial WGS analysis, candidate prioritization, and hypothesis generation. Results should be independently reviewed and experimentally validated before biological conclusions are made.
 
