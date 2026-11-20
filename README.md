@@ -510,3 +510,20 @@ python bioremediation_gene_miner.py "genome.gbk" --reference-db reference_413 --
 ```
 
 These inputs match the 413-sequence reference and annotation rules used in the BLC23O comparison. For optional InterProScan v6 enrichment, add `--interpro-auto --interpro-email your_email@example.org` to the Gene Miner command.
+
+## Windows launcher and InterPro recovery
+
+Requires Python 3 with Tkinter and a Windows DIAMOND executable.
+
+1. Download and extract this repository.
+2. Open the `windows_launcher` folder and double-click **Run Gene Miner.cmd**.
+3. Select your annotated GenBank file. To include InterProScan v6, choose Yes and enter your email.
+4. Keep the console window open while the analysis runs. Missing Python packages can be installed by the launcher.
+
+The launcher uses the existing Gene Miner workflow and the 413-sequence reference. If InterPro pauses, recovery continues using saved job IDs and completed results. Failed status/result reads are retried with bounded waits. A repeatedly failing protein is deferred while other proteins continue.
+
+To continue saved InterPro scans, double-click **Resume InterPro.cmd** and select the original results folder containing `interpro_candidates.faa`. Validated scan output is saved in its `InterPro_resume` subfolder.
+
+Ctrl+C stops the local session. Jobs already accepted by EMBL-EBI may continue remotely and can be checked using their saved IDs. An uncertain submission without a confirmed job ID is retained for inspection rather than automatically resubmitted.
+
+See `windows_launcher/READ-ME.txt` for recovery limits and diagnostic file locations.

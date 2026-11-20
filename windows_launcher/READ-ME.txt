@@ -1,0 +1,45 @@
+Gene Miner: foreground launcher and InterPro recovery
+
+Extract the whole ZIP before opening either command file. Keep all files together.
+
+NEW ANALYSIS
+Double-click Run Gene Miner.cmd. Select your GenBank file and enter your email.
+The original installed Python tool runs in the open console. If its InterPro batch
+pauses after a read error, the launcher starts recovery using the saved job IDs.
+
+CONTINUE A PREVIOUS INTERPRO RUN
+Double-click Resume InterPro.cmd. Select the ORIGINAL results folder containing
+interpro_candidates.faa (not the InterPro_resume subfolder). Enter your email.
+No genome file is needed. No genome path is guessed. Existing reports are not
+rewritten in this mode. Completed scan output is in InterPro_resume.
+
+WHAT RECOVERY DOES
+- Uses your original, installed InterProScan v6 REST adapter and its cache.
+- Retries failed reads of known jobs, with visible waits and a finite retry limit.
+- Defers a repeatedly failing protein and continues other proteins.
+- Reuses completed results; the original adapter validates sequence and MD5.
+- Keeps a submitted job ID instead of submitting the same sequence again.
+- Does not retry an uncertain submission that has no confirmed job ID.
+- Records failed request URLs, HTTP status and response bodies in
+  InterPro_resume/launcher_interpro_errors.jsonl.
+- Preserves original internal Python source files. No GitHub changes are made.
+
+KEEP THE CONSOLE OPEN
+Everything runs in this visible console. Ctrl+C stops the local session. A job
+already accepted by EMBL-EBI can still finish on their server; its saved ID will be
+used when you resume. Closing this console does not create a background worker.
+
+Recovery is bounded: at most five read retries per protein, three passes over
+pending jobs, fifteen minutes of waiting per adapter call, and twelve hours per
+session. If a service problem persists, the session ends as incomplete and retains
+the jobs for a later resume. Terminal failures and uncertain submissions require
+inspection. Recovery cannot guarantee EMBL-EBI service availability.
+
+Only a proven dead local process lock is archived automatically. An active or
+unidentifiable lock is retained and reported; a second run will not take it over.
+
+VALIDATION
+Recovery was tested against the original published v6 adapter with simulated HTTP
+responses, including read failures, queued jobs, interrupted runs, and uncertain
+submissions. No live EMBL-EBI job was submitted during these tests. The Windows
+dialogs and process checks require verification on Windows.
