@@ -557,4 +557,9 @@ To continue saved InterPro scans, double-click **Resume InterPro.cmd** and selec
 
 Ctrl+C stops the local session. Jobs already accepted by EMBL-EBI may continue remotely and can be checked using their saved IDs. An uncertain submission without a confirmed job ID is retained for inspection rather than automatically resubmitted.
 
+To look up papers after screening, double-click **Find Papers.cmd** and choose a
+saved results folder. Select individual Candidate or Review rows or click
+**Select all**. Enable Europe PMC and click **Search**. The lookup saves HTML and
+JSON alongside the screening reports.
+
 See `windows_launcher/READ-ME.txt` for recovery limits and diagnostic file locations.

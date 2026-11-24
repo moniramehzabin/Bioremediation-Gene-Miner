@@ -18,6 +18,7 @@ bioremediation activity.
 from __future__ import annotations
 
 import argparse
+import json
 from copy import copy
 import csv
 import re
@@ -63,6 +64,7 @@ def parse_genbank_biopython(path):
                 "contig": rec.id,
                 "locus_tag": qval(q, "locus_tag"),
                 "gene": qval(q, "gene"),
+                "protein_id": qval(q, "protein_id"),
                 "product": qval(q, "product"),
                 "translation": qval(q, "translation").replace(" ", ""),
                 "EC_number": ";".join(q.get("EC_number", [])),
@@ -107,6 +109,7 @@ def parse_genbank_fallback(path):
             "contig": contig,
             "locus_tag": _qualifier(block, "locus_tag"),
             "gene": _qualifier(block, "gene"),
+            "protein_id": _qualifier(block, "protein_id"),
             "product": _qualifier(block, "product"),
             "translation": _qualifier(block, "translation").replace(" ", ""),
             "EC_number": _qualifier(block, "EC_number"),
@@ -1893,6 +1896,10 @@ def main():
         help="Use an existing DIAMOND TSV in outdir",
     )
 
+    ap.add_argument(
+        "--assay-evidence-search", action="store_true",
+        help="Look up literature for final Candidate and Review rows and save HTML and JSON.",
+    )
     args = ap.parse_args()
 
     # InterPro is optional enrichment; core reports do not require the service.
@@ -2170,6 +2177,30 @@ def main():
 
     if interpro_full_xlsx.is_file():
         status_sheet(interpro_full_xlsx, interpro_state, pd)
+
+    if args.assay_evidence_search:
+        from geneminer_assay_search import (
+            render_report_html, report_search_rows, search_report_rows,
+        )
+
+        evidence_input = report.with_name(report.stem + "_all_candidates.tsv")
+        rows = report_search_rows(evidence_input) if not final.empty else []
+        proteins = {
+            row["locus_tag"]: (row.get("protein_id"), row["translation"])
+            for row in cds
+        }
+        print("[info] Starting literature lookup.", flush=True)
+        evidence = search_report_rows(
+            rows, proteins, online=True,
+            progress=lambda done, total: print(
+                f"[info] Literature lookups: {done}/{total} complete", flush=True
+            ),
+        )
+        evidence_json = outdir / "Assay_Evidence.json"
+        evidence_html = outdir / "Assay_Evidence.html"
+        evidence_json.write_text(json.dumps(evidence, indent=2), encoding="utf-8")
+        evidence_html.write_text(render_report_html(evidence), encoding="utf-8")
+        print(f"[info] Assay evidence for {len(rows)} rows: {evidence_html.resolve()}")
 
     print("\nDONE")
     print("Report:", report.resolve())

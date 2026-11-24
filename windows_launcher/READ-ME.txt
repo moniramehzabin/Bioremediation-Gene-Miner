@@ -3,9 +3,8 @@ Gene Miner: foreground launcher and InterPro recovery
 Extract the whole ZIP before opening either command file. Keep all files together.
 
 NEW ANALYSIS
-Double-click Run Gene Miner.cmd. Select your GenBank file and enter your email.
-The original installed Python tool runs in the open console. If its InterPro batch
-pauses after a read error, the launcher starts recovery using the saved job IDs.
+Double-click Run Gene Miner.cmd and select your GenBank file. Choose whether to
+include InterProScan.
 
 CONTINUE A PREVIOUS INTERPRO RUN
 Double-click Resume InterPro.cmd. Select the ORIGINAL results folder containing
@@ -43,3 +42,14 @@ Recovery was tested against the original published v6 adapter with simulated HTT
 responses, including read failures, queued jobs, interrupted runs, and uncertain
 submissions. No live EMBL-EBI job was submitted during these tests. The Windows
 dialogs and process checks require verification on Windows.
+
+FIND PAPERS
+Double-click Find Papers.cmd and choose a saved Gene Miner results folder.
+Select one or more Candidate or Review rows, or click Select all. Enable
+Europe PMC and click Search. When prompted, open the HTML report in your
+browser. The launcher also saves JSON in the results folder.
+Paper matches are literature leads. Searches by family provide context when
+public accessions are unavailable. Screening decisions are preserved.
+
+To retry failed lookups, click Retry failed searches and select the saved JSON
+report. The launcher saves a new HTML and JSON pair alongside it.
