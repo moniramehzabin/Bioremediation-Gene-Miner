@@ -161,10 +161,172 @@ def find_diamond(window, tool):
     return Path(selected).resolve() if selected else None
 
 
+def find_saved_candidate_report(folder):
+    names = (
+        "Bioremediation_Gene_Miner_Report_all_candidates.tsv",
+        "Bioremediation_Gene_Miner_Report_family_level_candidates.tsv",
+        "Bioremediation_Gene_Miner_Core_Report_all_candidates.tsv",
+        "Bioremediation_Gene_Miner_Core_Report_family_level_candidates.tsv",
+    )
+    for name in names:
+        report = folder / name
+        if report.is_file():
+            return report
+
+    reports = {}
+    for name in names:
+        for report in folder.rglob(name):
+            if report.is_file():
+                reports.setdefault(report.parent, report)
+    return max(reports.values(), key=lambda path: (path.stat().st_mtime_ns, str(path)), default=None)
+
+
+def search_assay_evidence(window):
+    tool = find_tool(window)
+    if tool is None:
+        return
+    script = tool.with_name("geneminer_assay_search.py")
+    spec = importlib.util.spec_from_file_location("geneminer_assay_search", script)
+    lookup = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(lookup)
+    selected = filedialog.askdirectory(
+        parent=window, title="Select a saved Gene Miner results folder",
+        initialdir=str(Path.home() / "Gene Miner Results"),
+    )
+    if not selected:
+        return
+    output = Path(selected)
+    report = find_saved_candidate_report(output)
+    if report is None:
+        messagebox.showinfo(
+            TITLE, "No Gene Miner candidate report was found in this folder or its subfolders.",
+            parent=window,
+        )
+        return
+    output = report.parent
+    rows = lookup.report_search_rows(report)
+    if not rows:
+        messagebox.showinfo(TITLE, "No Candidate or Review rows found.", parent=window)
+        return
+
+    window.title("Find Papers")
+    window.geometry("850x460")
+    tk.Label(window, text="Select Candidate or Review rows to check for assay evidence.").pack(pady=8)
+    frame = tk.Frame(window)
+    frame.pack(fill="both", expand=True, padx=12)
+    scrollbar = tk.Scrollbar(frame)
+    scrollbar.pack(side="right", fill="y")
+    choices = tk.Listbox(frame, selectmode="extended", exportselection=False, yscrollcommand=scrollbar.set)
+    choices.pack(side="left", fill="both", expand=True)
+    scrollbar.config(command=choices.yview)
+    for row in rows:
+        choices.insert("end", "   |   ".join(row[k] for k in (
+            "Locus_tag", "Family_target", "Decision", "Best_reference",
+        )))
+    tk.Button(window, text="Select all", command=lambda: choices.selection_set(0, "end")).pack(pady=4)
+    online = tk.BooleanVar(value=False)
+    tk.Checkbutton(window, text="Search Europe PMC for papers", variable=online).pack()
+
+    def search():
+        selected_rows = [rows[i] for i in choices.curselection()]
+        if not selected_rows:
+            messagebox.showinfo(TITLE, "Select at least one row.", parent=window)
+            return
+        button.config(state="disabled")
+        window.config(cursor="watch")
+        window.update_idletasks()
+        try:
+            from Bio import SeqIO
+
+            loci = {row["Locus_tag"] for row in selected_rows}
+            proteins = {}
+            for name in ("hypothetical_proteins.faa", "annotated_unmatched.faa", "pet_control_queries.faa"):
+                fasta = output / name
+                if fasta.is_file():
+                    for record in SeqIO.parse(str(fasta), "fasta"):
+                        if record.id in loci:
+                            proteins[record.id] = (None, str(record.seq).upper())
+            manifest = output / "launcher_run.json"
+            if manifest.is_file():
+                genome_path = json.loads(manifest.read_text(encoding="utf-8")).get("genome")
+                if genome_path and Path(genome_path).is_file():
+                    for record in SeqIO.parse(genome_path, "genbank"):
+                        for feature in record.features:
+                            if feature.type != "CDS":
+                                continue
+                            q = feature.qualifiers
+                            locus = q.get("locus_tag", [None])[0]
+                            if locus in loci:
+                                sequence = q.get("translation", [proteins.get(locus, (None, None))[1]])[0]
+                                proteins[locus] = (q.get("protein_id", [None])[0],
+                                                  "".join(sequence.split()).upper() if sequence else None)
+            result = lookup.search_report_rows(
+                selected_rows, proteins, online.get(),
+                progress=lambda done, total: print(
+                    f"Literature lookups: {done}/{total} complete", flush=True
+                ),
+            )
+            path = output / f"assay_evidence_{datetime.now():%Y%m%d_%H%M%S_%f}.json"
+            write_json(path, result)
+            html_path = path.with_suffix(".html")
+            html_path.write_text(lookup.render_report_html(result), encoding="utf-8")
+            if messagebox.askyesno(TITLE, f"Evidence saved for {len(selected_rows)} selected rows.\n\nOpen report?\n{html_path}",
+                                   parent=window):
+                import os
+                os.startfile(html_path)
+        except (OSError, ValueError, ImportError) as error:
+            messagebox.showerror(TITLE, str(error), parent=window)
+        finally:
+            button.config(state="normal")
+            window.config(cursor="")
+
+    def retry():
+        filename = filedialog.askopenfilename(
+            parent=window, title="Select a saved Find Papers JSON report",
+            initialdir=str(output), filetypes=[("Find Papers report", "*.json")],
+        )
+        if not filename:
+            return
+        window.config(cursor="watch")
+        window.update_idletasks()
+        try:
+            source = Path(filename)
+            result = json.loads(source.read_text(encoding="utf-8-sig"))
+            count = lookup.retry_failed_lookups(
+                result, progress=lambda done, total: print(
+                    f"Retrying lookups: {done}/{total} complete", flush=True
+                ),
+            )
+            if not count:
+                messagebox.showinfo(TITLE, "No failed lookups to retry.", parent=window)
+                return
+            path = source.with_name(f"assay_evidence_retry_{datetime.now():%Y%m%d_%H%M%S_%f}.json")
+            html_path = path.with_suffix(".html")
+            write_json(path, result)
+            html_path.write_text(lookup.render_report_html(result), encoding="utf-8")
+            if messagebox.askyesno(TITLE, f"Retried {count} failed entries. Open report?",
+                                   parent=window):
+                import os
+                os.startfile(html_path)
+        except (OSError, ValueError, KeyError, TypeError, AttributeError) as error:
+            messagebox.showerror(TITLE, str(error), parent=window)
+        finally:
+            window.config(cursor="")
+
+    tk.Button(window, text="Retry failed searches", command=retry).pack()
+    button = tk.Button(window, text="Search", command=search)
+    button.pack(pady=8)
+    window.deiconify()
+    window.mainloop()
+
+
 def main():
     window = tk.Tk()
     window.withdraw()
     try:
+        if "--search-assay-evidence" in sys.argv[1:]:
+            search_assay_evidence(window)
+            return
         if "--resume-interpro" in sys.argv[1:]:
             resume_interpro(window)
             return
