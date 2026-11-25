@@ -12,6 +12,7 @@ authors:
     given-names: "Khandoker Md"
 
 version: "5.0.0"
+doi: "10.5281/zenodo.24521530"
 date-released: "2026-11-25"
 
 url: "https://github.com/moniramehzabin/Bioremediation-Gene-Miner/releases/tag/v5.0.0"
